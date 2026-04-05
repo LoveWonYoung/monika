@@ -41,6 +41,12 @@ cd /Users/lianmin/Documents/GitHub/canbuskit/IsoTpEngine
 python3 python/stress_sim.py --cases 2000 --max-req-len 4095 --max-rsp-len 4095
 ```
 
+`IsoTpEngine` 现已支持批量 FFI：
+- `on_can_frames([(can_id, data, is_fd), ...], ts_ms=...)`
+- `pop_tx_can_frames(max_frames=..., buf_cap=64)`
+
+`step_once(...)` 与 `stress_sim.py` 默认优先走批量路径（旧单帧接口仍可用）。
+
 ## CAN / CAN-FD pack-unpack tests
 
 ```bash

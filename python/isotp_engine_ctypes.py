@@ -118,18 +118,18 @@ def step_once(
 ) -> None:
     now = monotonic_ms() if ts_ms is None else ts_ms
 
+    rx_batch: List[Tuple[int, bytes, bool]] = []
     while True:
         msg = rxfunc()
         if msg is None:
             break
-        tp.on_can_frame(can_id=msg.id, data=msg.data, is_fd=msg.isfd, ts_ms=now)
+        rx_batch.append((msg.id, msg.data, msg.isfd))
+    if rx_batch:
+        tp.on_can_frames(rx_batch, ts_ms=now)
 
     tp.tick(ts_ms=now)
 
-    while True:
-        out = tp.pop_tx_can_frame()
-        if out is None:
-            break
+    for out in tp.pop_all_tx_can_frames():
         can_id, data, is_fd = out
         txfunc(can_id, data, is_fd)
 
@@ -177,6 +177,15 @@ class _IsoTpConfigC(Structure):
         ("n_cr_ms", c_uint32),
         ("stmin_ms", c_uint8),
         ("block_size", c_uint8),
+    ]
+
+
+class _IsoTpCanFrameInC(Structure):
+    _fields_ = [
+        ("id", c_uint32),
+        ("is_fd", c_uint8),
+        ("data_ptr", POINTER(c_uint8)),
+        ("data_len", c_size_t),
     ]
 
 
@@ -272,6 +281,47 @@ class IsoTpEngine:
         if rc != FFI_OK:
             raise IsoTpError(rc)
 
+    def on_can_frames(
+        self,
+        frames: List[Tuple[int, bytes, bool]],
+        ts_ms: Optional[int] = None,
+    ) -> int:
+        if not frames:
+            return 0
+        ts = monotonic_ms() if ts_ms is None else ts_ms
+
+        if not self._has_batch_on_can_frames:
+            for can_id, data, is_fd in frames:
+                self.on_can_frame(can_id=can_id, data=data, is_fd=is_fd, ts_ms=ts)
+            return len(frames)
+
+        frame_array = (_IsoTpCanFrameInC * len(frames))()
+        data_bufs = []
+        for idx, (can_id, data, is_fd) in enumerate(frames):
+            payload = bytes(data)
+            data_ptr = None
+            if payload:
+                data_buf = (c_uint8 * len(payload)).from_buffer_copy(payload)
+                data_bufs.append(data_buf)
+                data_ptr = ctypes.cast(data_buf, POINTER(c_uint8))
+
+            frame_array[idx].id = can_id
+            frame_array[idx].is_fd = 1 if is_fd else 0
+            frame_array[idx].data_ptr = data_ptr
+            frame_array[idx].data_len = len(payload)
+
+        out_processed = c_size_t()
+        rc = self._lib.isotp_on_can_frames(
+            self._engine,
+            frame_array,
+            c_size_t(len(frames)),
+            c_uint64(ts),
+            byref(out_processed),
+        )
+        if rc != FFI_OK:
+            raise IsoTpError(rc)
+        return int(out_processed.value)
+
     def tx_uds_msg(
         self,
         payload: bytes,
@@ -338,13 +388,61 @@ class IsoTpEngine:
         data = bytes(out_buf[: out_len.value])
         return out_id.value, data, bool(out_is_fd.value)
 
-    def pop_all_tx_can_frames(self, buf_cap: int = 64) -> List[Tuple[int, bytes, bool]]:
+    def pop_tx_can_frames(
+        self,
+        max_frames: int = 64,
+        buf_cap: int = 64,
+    ) -> List[Tuple[int, bytes, bool]]:
+        if max_frames <= 0:
+            return []
+        if buf_cap <= 0:
+            raise ValueError("buf_cap must be > 0")
+
+        if not self._has_batch_pop_tx_can_frames:
+            frames: List[Tuple[int, bytes, bool]] = []
+            for _ in range(max_frames):
+                item = self.pop_tx_can_frame(buf_cap=buf_cap)
+                if item is None:
+                    break
+                frames.append(item)
+            return frames
+
+        out_ids = (c_uint32 * max_frames)()
+        out_is_fd = (c_uint8 * max_frames)()
+        out_lens = (c_size_t * max_frames)()
+        out_buf = (c_uint8 * (max_frames * buf_cap))()
+        out_count = c_size_t()
+        rc = self._lib.isotp_pop_tx_can_frames(
+            self._engine,
+            out_ids,
+            out_is_fd,
+            out_buf,
+            c_size_t(buf_cap),
+            out_lens,
+            c_size_t(max_frames),
+            byref(out_count),
+        )
+        if rc == FFI_OK:
+            return []
+        if rc != FFI_HAS_ITEM:
+            raise IsoTpError(rc)
+
+        count = int(out_count.value)
+        frames: List[Tuple[int, bytes, bool]] = []
+        for idx in range(count):
+            data_len = int(out_lens[idx])
+            start = idx * buf_cap
+            end = start + data_len
+            frames.append((int(out_ids[idx]), bytes(out_buf[start:end]), bool(out_is_fd[idx])))
+        return frames
+
+    def pop_all_tx_can_frames(self, buf_cap: int = 64, batch_size: int = 64) -> List[Tuple[int, bytes, bool]]:
         frames: List[Tuple[int, bytes, bool]] = []
         while True:
-            item = self.pop_tx_can_frame(buf_cap=buf_cap)
-            if item is None:
+            chunk = self.pop_tx_can_frames(max_frames=batch_size, buf_cap=buf_cap)
+            if not chunk:
                 break
-            frames.append(item)
+            frames.extend(chunk)
         return frames
 
     def rx_uds_msg(self, buf_cap: int = 8192) -> Optional[bytes]:
@@ -427,6 +525,9 @@ class IsoTpEngine:
         raise TimeoutError("UDS final response timeout")
 
     def _bind(self) -> None:
+        self._has_batch_on_can_frames = False
+        self._has_batch_pop_tx_can_frames = False
+
         self._lib.isotp_default_config.argtypes = []
         self._lib.isotp_default_config.restype = _IsoTpConfigC
 
@@ -452,6 +553,16 @@ class IsoTpEngine:
             c_uint64,
         ]
         self._lib.isotp_on_can_frame.restype = c_int32
+        if hasattr(self._lib, "isotp_on_can_frames"):
+            self._lib.isotp_on_can_frames.argtypes = [
+                c_void_p,
+                POINTER(_IsoTpCanFrameInC),
+                c_size_t,
+                c_uint64,
+                POINTER(c_size_t),
+            ]
+            self._lib.isotp_on_can_frames.restype = c_int32
+            self._has_batch_on_can_frames = True
 
         self._lib.isotp_tx_uds_msg.argtypes = [
             c_void_p,
@@ -474,6 +585,19 @@ class IsoTpEngine:
             POINTER(c_size_t),
         ]
         self._lib.isotp_pop_tx_can_frame.restype = c_int32
+        if hasattr(self._lib, "isotp_pop_tx_can_frames"):
+            self._lib.isotp_pop_tx_can_frames.argtypes = [
+                c_void_p,
+                POINTER(c_uint32),
+                POINTER(c_uint8),
+                POINTER(c_uint8),
+                c_size_t,
+                POINTER(c_size_t),
+                c_size_t,
+                POINTER(c_size_t),
+            ]
+            self._lib.isotp_pop_tx_can_frames.restype = c_int32
+            self._has_batch_pop_tx_can_frames = True
 
         self._lib.isotp_rx_uds_msg.argtypes = [
             c_void_p,
@@ -678,13 +802,16 @@ class IsoTpEngineWorker:
                         except IsoTpError as e:
                             self._err_q.put(e.code)
 
+                    rx_batch: List[Tuple[int, bytes, bool]] = []
                     while True:
                         try:
                             can = self._rx_can_q.get_nowait()
                         except queue.Empty:
                             break
+                        rx_batch.append((can.can_id, can.data, can.is_fd))
+                    if rx_batch:
                         try:
-                            tp.on_can_frame(can.can_id, can.data, can.is_fd, ts_ms=loop_started)
+                            tp.on_can_frames(rx_batch, ts_ms=loop_started)
                         except IsoTpError as e:
                             self._err_q.put(e.code)
 
@@ -693,10 +820,7 @@ class IsoTpEngineWorker:
                     except IsoTpError as e:
                         self._err_q.put(e.code)
 
-                    while True:
-                        item = tp.pop_tx_can_frame()
-                        if item is None:
-                            break
+                    for item in tp.pop_all_tx_can_frames():
                         self._tx_can_q.put(item)
 
                     while True:

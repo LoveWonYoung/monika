@@ -61,6 +61,33 @@ class CanCanFdPackUnpackTests(unittest.TestCase):
             self.assertEqual(got, bytes([0x62, 0xF1, 0x90]))
             self._assert_no_err(tp, "can_sf_unpack")
 
+    def test_can_batch_on_can_frames_unpack(self):
+        with IsoTpEngine(REQ_ID, RESP_ID, FUNC_ID, is_fd=False, cfg=_cfg_fast()) as tp:
+            processed = tp.on_can_frames(
+                [
+                    (RESP_ID, bytes([0x03, 0x62, 0xF1, 0x90, 0, 0, 0, 0]), False),
+                    (RESP_ID, bytes([0x03, 0x62, 0xF1, 0x91, 0, 0, 0, 0]), False),
+                ],
+                ts_ms=0,
+            )
+            self.assertEqual(processed, 2)
+            self.assertEqual(tp.rx_uds_msg(), bytes([0x62, 0xF1, 0x90]))
+            self.assertEqual(tp.rx_uds_msg(), bytes([0x62, 0xF1, 0x91]))
+            self._assert_no_err(tp, "can_batch_unpack")
+
+    def test_can_batch_pop_tx_can_frames(self):
+        with IsoTpEngine(REQ_ID, RESP_ID, FUNC_ID, is_fd=False, cfg=_cfg_fast()) as tp:
+            tp.tx_uds_msg(bytes([0x22, 0xF1, 0x90]), functional=False, ts_ms=0)
+            tp.tx_uds_msg(bytes([0x19, 0x02]), functional=False, ts_ms=0)
+
+            frames = tp.pop_tx_can_frames(max_frames=8, buf_cap=64)
+            self.assertEqual(len(frames), 2)
+            self.assertEqual(frames[0][0], REQ_ID)
+            self.assertEqual(frames[1][0], REQ_ID)
+            self.assertGreaterEqual(len(frames[0][1]), 8)
+            self.assertGreaterEqual(len(frames[1][1]), 8)
+            self._assert_no_err(tp, "can_batch_pop_tx")
+
     def test_can_multi_frame_pack_unpack(self):
         req_payload = bytes((i & 0xFF) for i in range(40))
 

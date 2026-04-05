@@ -38,12 +38,7 @@ def make_response_payload(req: bytes, rsp_len: int) -> bytes:
 
 
 def drain_tx(tp: IsoTpEngine) -> List[Tuple[int, bytes, bool]]:
-    out: List[Tuple[int, bytes, bool]] = []
-    while True:
-        frame = tp.pop_tx_can_frame()
-        if frame is None:
-            return out
-        out.append(frame)
+    return tp.pop_all_tx_can_frames()
 
 
 def pump_case(

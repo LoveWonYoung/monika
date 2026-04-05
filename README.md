@@ -30,8 +30,10 @@ Python 绑定（`python/isotp_engine_ctypes.py`）：
 - `IsoTpEngine(req_id, resp_id, func_id, is_fd, cfg)`
 - `tx_uds_msg(payload, functional=False, ts_ms=...)`
 - `on_can_frame(can_id, data, is_fd, ts_ms=...)`
+- `on_can_frames([(can_id, data, is_fd), ...], ts_ms=...)`（批量注入）
 - `tick(ts_ms=...)`
 - `pop_tx_can_frame()`
+- `pop_tx_can_frames(max_frames=..., buf_cap=64)`（批量弹出）
 - `rx_uds_msg()`
 - `pop_error()`
 
@@ -63,6 +65,7 @@ C ABI 返回语义：
 - `block_size=0` 表示对端可连续发送/接收，不按块等待 FC。
 - `tx_padding=Dlc` 时，CAN-FD 会按 DLC 档位补齐（8/12/16/20/24/32/48/64）。
 - 当前实现里 `Raw` 与 `Min8` 都会至少补齐到 8 字节（按当前项目约定）。
+- 当前实现里接收侧单条 ISO-TP PDU 最大为 8KB（8192 字节），超限首帧会被拒绝并上报解析错误。
 
 ## 6. 主循环顺序（必须）
 

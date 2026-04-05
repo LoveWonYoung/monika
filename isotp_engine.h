@@ -19,6 +19,14 @@ typedef struct IsoTpConfigC {
     uint8_t block_size;
 } IsoTpConfigC;
 
+/* C-compatible input CAN frame for batch ingest. */
+typedef struct IsoTpCanFrameInC {
+    uint32_t id;
+    uint8_t is_fd;
+    const uint8_t* data_ptr;
+    size_t data_len;
+} IsoTpCanFrameInC;
+
 /* Generic FFI return codes. */
 enum {
     ISOTP_FFI_OK = 0,
@@ -71,6 +79,19 @@ int32_t isotp_on_can_frame(
     uint64_t ts_ms
 );
 
+/*
+ * Feeds a batch of CAN/CAN-FD frames into the TP engine.
+ * Returns ISOTP_FFI_OK on full success. On error, returns <0 and (if non-null)
+ * writes how many frames were successfully processed before failure.
+ */
+int32_t isotp_on_can_frames(
+    IsoTpEngine* engine,
+    const IsoTpCanFrameInC* frames_ptr,
+    size_t frame_count,
+    uint64_t ts_ms,
+    size_t* out_processed
+);
+
 /* Enqueues one UDS payload for TP transmit. */
 int32_t isotp_tx_uds_msg(
     IsoTpEngine* engine,
@@ -97,6 +118,25 @@ int32_t isotp_pop_tx_can_frame(
     uint8_t* out_data_ptr,
     size_t out_data_cap,
     size_t* out_data_len
+);
+
+/*
+ * Pops up to max_frames pending CAN frames in one call.
+ * Data is written as fixed-size slots into out_data_ptr with stride out_data_stride.
+ * Returns:
+ *   ISOTP_FFI_HAS_ITEM when one or more frames are written
+ *   ISOTP_FFI_OK when queue is empty
+ *   <0 on error
+ */
+int32_t isotp_pop_tx_can_frames(
+    IsoTpEngine* engine,
+    uint32_t* out_ids,
+    uint8_t* out_is_fd,
+    uint8_t* out_data_ptr,
+    size_t out_data_stride,
+    size_t* out_data_lens,
+    size_t max_frames,
+    size_t* out_count
 );
 
 /*
