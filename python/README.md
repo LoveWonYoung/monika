@@ -3,7 +3,7 @@
 ## Build Rust library
 
 ```bash
-cd /Users/lianmin/Documents/GitHub/canbuskit/IsoTpEngine
+# from repo root
 cargo build --release
 ```
 
@@ -19,8 +19,8 @@ Windows output:
 ## Run demo
 
 ```bash
-cd /Users/lianmin/Documents/GitHub/canbuskit/IsoTpEngine/python
-python3 demo.py
+# from repo root
+python3 python/demo.py
 ```
 
 `isotp_engine_ctypes.py` will load the default library path:
@@ -37,7 +37,7 @@ This script creates two Rust ISO-TP endpoints in one Python process:
 It pumps CAN frames between both sides, feeds `tick()`, and validates request/response payload integrity.
 
 ```bash
-cd /Users/lianmin/Documents/GitHub/canbuskit/IsoTpEngine
+# from repo root
 python3 python/stress_sim.py --cases 2000 --max-req-len 4095 --max-rsp-len 4095
 ```
 
@@ -50,7 +50,7 @@ python3 python/stress_sim.py --cases 2000 --max-req-len 4095 --max-rsp-len 4095
 ## CAN / CAN-FD pack-unpack tests
 
 ```bash
-cd /Users/lianmin/Documents/GitHub/canbuskit/IsoTpEngine
+# from repo root
 python3 -m unittest discover -s python/tests -p "test_*.py" -v
 ```
 

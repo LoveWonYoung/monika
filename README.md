@@ -39,7 +39,7 @@ Python 绑定（`python/isotp_engine_ctypes.py`）：
 
 C ABI 返回语义：
 - `0`: 正常（且“无可弹出项”）
-- `1`: 成功弹出一项（用于 `pop_*`）
+- `1`: 成功弹出（`pop_tx_can_frame`/`rx_uds_msg`/`pop_error` 为 1 项；`pop_tx_can_frames` 为 >=1 项）
 - `<0`: 错误码
 
 ## 4. ID 含义
@@ -50,7 +50,8 @@ C ABI 返回语义：
 
 注意：
 - `on_can_frame()` 只处理匹配当前会话的帧（`id == resp_id` 且 `is_fd` 一致）。
-- 不匹配帧会被忽略，不会报错。
+- `id` 不匹配或 `is_fd` 不一致会被忽略，不会报错。
+- 但 `data` 为空时会返回 `InvalidCanFrame`（不会被“忽略分支”吞掉）。
 
 ## 5. 配置项（`TpConfig`）
 
@@ -59,12 +60,12 @@ C ABI 返回语义：
 - `n_cr_ms = 1000`
 - `stmin_ms = 20`
 - `block_size = 0`
-- `tx_padding = Dlc`
 
 说明：
 - `block_size=0` 表示对端可连续发送/接收，不按块等待 FC。
-- `tx_padding=Dlc` 时，CAN-FD 会按 DLC 档位补齐（8/12/16/20/24/32/48/64）。
-- 当前实现里 `Raw` 与 `Min8` 都会至少补齐到 8 字节（按当前项目约定）。
+- 当前 Python ctypes + C ABI 暴露的配置项只有上面 4 个字段。
+- 当前 FFI 实现里 `tx_padding` 固定为 `Dlc`（CAN-FD 会按 DLC 档位补齐：8/12/16/20/24/32/48/64）。
+- `Raw` 与 `Min8` 是 Rust 侧 `TxPaddingMode` 的枚举值，但不在当前 ctypes/FFI 配置入口中暴露。
 - 当前实现里接收侧单条 ISO-TP PDU 最大为 8KB（8192 字节），超限首帧会被拒绝并上报解析错误。
 
 ## 6. 主循环顺序（必须）
@@ -84,7 +85,7 @@ C ABI 返回语义：
 
 ```python
 import time
-from isotp_engine_ctypes import IsoTpEngine, TpConfig, monotonic_ms
+from isotp_engine_ctypes import IsoTpEngine, IsoTpError, TpConfig, monotonic_ms
 
 
 def run(bus):
@@ -106,14 +107,20 @@ def run(bus):
             now = monotonic_ms()
 
             for fr in bus.recv_nonblocking():
-                tp.on_can_frame(
-                    can_id=fr.can_id,
-                    data=fr.data,
-                    is_fd=fr.is_fd,
-                    ts_ms=now,
-                )
+                try:
+                    tp.on_can_frame(
+                        can_id=fr.can_id,
+                        data=fr.data,
+                        is_fd=fr.is_fd,
+                        ts_ms=now,
+                    )
+                except IsoTpError as e:
+                    print("on_can_frame error:", e)
 
-            tp.tick(ts_ms=now)
+            try:
+                tp.tick(ts_ms=now)
+            except IsoTpError as e:
+                print("tick error:", e)
 
             while True:
                 out = tp.pop_tx_can_frame()
