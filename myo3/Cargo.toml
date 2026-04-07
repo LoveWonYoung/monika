@@ -1,0 +1,30 @@
+[package]
+name = "isotp_engine"
+version = "0.1.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "isotp_engine"
+crate-type = ["rlib","cdylib"]
+
+[dependencies]
+pyo3 = "0.28.3"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+#[lib]
+#name = "isotp_engine"
+#path = "src/lib.rs"
+#crate-type = ["rlib", "cdylib"]
+#
+#[profile.release]
+#opt-level = "z"
+#lto = "fat"
+#codegen-units = 1
+#panic = "abort"
+#strip = "symbols"

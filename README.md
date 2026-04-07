@@ -172,8 +172,8 @@ def run(bus):
 ## 10. Toomoss LIN 实机接入（Master）
 
 已提供基于 Toomoss 官方 `usb2lin_ex.py` 的设备封装：
-- `python/devices/toomoss/toomoss_usb2lin.py`：`ToomossLin`
-- `python/devices/tp_clients.py`：`LinTpWorker`
+- `python/lin_device/toomoss_usb2lin.py`：`ToomossLin`
+- `python/lin_device/clients.py`：`LinTpWorker`
 
 `ToomossLin` 关键接口：
 - `write_message(frame_id, data)`：主机写帧（MW）
@@ -184,8 +184,8 @@ def run(bus):
 最小示例：
 
 ```python
-from devices.toomoss import ToomossLin
-from devices.tp_clients import LinTpWorker
+from lin_device import ToomossLin
+from lin_device.clients import LinTpWorker
 
 with ToomossLin(channel=0, baudrate=19200, master=True) as hw:
     with LinTpWorker(
