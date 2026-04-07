@@ -22,7 +22,7 @@ pub use lin_transport::{
 pub use transport::{CanFrame, IsoTpEngine, TpConfig, TpError, TxPaddingMode};
 
 #[pymodule]
-fn isotp_engine(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     pyo3_exports::register(m)
 }
 

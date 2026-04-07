@@ -3,11 +3,19 @@ requires = ["maturin>=1.12,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "isotp_engine"
+name = "isotp-engine"
+version = "0.1.0"
+description = "Rust-backed ISO-TP / LIN-TP engine with Python bindings"
+readme = "../README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dynamic = ["version"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "isotp_engine._native"
+features = ["pyo3/extension-module"]
