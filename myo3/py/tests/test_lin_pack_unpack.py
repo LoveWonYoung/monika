@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 import sys
 
-# Ensure `python/` is on sys.path when running from repo root.
+# Ensure `py/` is on sys.path when running from repo root.
 THIS_FILE = Path(__file__).resolve()
 PYTHON_DIR = THIS_FILE.parents[1]
 if str(PYTHON_DIR) not in sys.path:
