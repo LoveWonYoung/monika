@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[test]
@@ -510,4 +509,230 @@ fn test_rx_first_frame_over_max_pdu_len_rejected() {
         ))
     );
     assert!(engine.rx_uds_msg().is_none());
+}
+
+#[test]
+fn test_lin_single_frame_request_and_response() {
+    let mut engine = LinTpEngine::init(
+        LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        0x10,
+        LIN_BROADCAST_NAD,
+        LinTpConfig::default(),
+    )
+    .unwrap();
+
+    engine.tx_uds_msg(&[0x22, 0xF1, 0x90], false, 0).unwrap();
+    let tx = engine.pop_tx_lin_frame().unwrap();
+    assert_eq!(tx.id, LIN_MASTER_DIAGNOSTIC_FRAME_ID);
+    assert_eq!(
+        tx.data,
+        vec![0x10, 0x03, 0x22, 0xF1, 0x90, 0x00, 0x00, 0x00]
+    );
+
+    engine
+        .on_lin_frame(
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            &[0x10, 0x03, 0x62, 0xF1, 0x90, 0x00, 0x00, 0x00],
+            1,
+        )
+        .unwrap();
+    assert_eq!(engine.rx_uds_msg().unwrap(), vec![0x62, 0xF1, 0x90]);
+}
+
+#[test]
+fn test_lin_functional_single_frame_uses_broadcast_nad() {
+    let mut engine = LinTpEngine::init(
+        LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        0x10,
+        LIN_BROADCAST_NAD,
+        LinTpConfig::default(),
+    )
+    .unwrap();
+
+    engine.tx_uds_msg(&[0x3E, 0x00], true, 0).unwrap();
+    let tx = engine.pop_tx_lin_frame().unwrap();
+    assert_eq!(tx.data[0], LIN_BROADCAST_NAD);
+    assert_eq!(tx.data[1], LIN_PCI_TYPE_SINGLE_FRAME | 0x02);
+}
+
+#[test]
+fn test_lin_multi_frame_tx_segmentation() {
+    let mut engine = LinTpEngine::init(
+        LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        0x12,
+        LIN_BROADCAST_NAD,
+        LinTpConfig::default(),
+    )
+    .unwrap();
+
+    let payload = vec![
+        0x2E, 0xF1, 0x90, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C,
+        0x0D,
+    ];
+    engine.tx_uds_msg(&payload, false, 0).unwrap();
+
+    let ff = engine.pop_tx_lin_frame().unwrap();
+    assert_eq!(ff.id, LIN_MASTER_DIAGNOSTIC_FRAME_ID);
+    assert_eq!(ff.data[0], 0x12);
+    assert_eq!(ff.data[1] & 0xF0, LIN_PCI_TYPE_FIRST_FRAME);
+    assert_eq!(ff.data[2], payload.len() as u8);
+    assert_eq!(&ff.data[3..8], &payload[..5]);
+
+    let cf1 = engine.pop_tx_lin_frame().unwrap();
+    assert_eq!(cf1.data[1] & 0xF0, LIN_PCI_TYPE_CONSECUTIVE_FRAME);
+    assert_eq!(cf1.data[1] & 0x0F, 0x01);
+    assert_eq!(&cf1.data[2..8], &payload[5..11]);
+
+    let cf2 = engine.pop_tx_lin_frame().unwrap();
+    assert_eq!(cf2.data[1] & 0xF0, LIN_PCI_TYPE_CONSECUTIVE_FRAME);
+    assert_eq!(cf2.data[1] & 0x0F, 0x02);
+    assert_eq!(&cf2.data[2..7], &payload[11..16]);
+    assert_eq!(cf2.data[7], 0x00);
+
+    assert!(engine.pop_tx_lin_frame().is_none());
+}
+
+#[test]
+fn test_lin_multi_frame_rx_reassembly() {
+    let mut engine = LinTpEngine::init(
+        LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        0x10,
+        LIN_BROADCAST_NAD,
+        LinTpConfig::default(),
+    )
+    .unwrap();
+
+    engine
+        .on_lin_frame(
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            &[0x22, 0x10, 0x0C, 0x62, 0xF1, 0x90, 0x01, 0x02],
+            10,
+        )
+        .unwrap();
+    engine
+        .on_lin_frame(
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            &[0x22, 0x21, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            11,
+        )
+        .unwrap();
+    engine
+        .on_lin_frame(
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            &[0x22, 0x22, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00],
+            12,
+        )
+        .unwrap();
+
+    assert_eq!(
+        engine.rx_uds_msg().unwrap(),
+        vec![
+            0x62, 0xF1, 0x90, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09
+        ]
+    );
+}
+
+#[test]
+fn test_lin_rx_sequence_mismatch_reports_error() {
+    let mut engine = LinTpEngine::init(
+        LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        0x10,
+        LIN_BROADCAST_NAD,
+        LinTpConfig::default(),
+    )
+    .unwrap();
+
+    engine
+        .on_lin_frame(
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            &[0x22, 0x10, 0x08, 0x62, 0xF1, 0x90, 0x01, 0x02],
+            0,
+        )
+        .unwrap();
+    let rc = engine.on_lin_frame(
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        &[0x22, 0x22, 0x03, 0x04, 0x05, 0x00, 0x00, 0x00],
+        1,
+    );
+    assert!(rc.is_err());
+    assert_eq!(
+        engine.pop_error(),
+        Some(TpError::SequenceMismatch {
+            expected: 1,
+            got: 2
+        })
+    );
+}
+
+#[test]
+fn test_lin_tick_timeout_for_multiframe_rx() {
+    let mut engine = LinTpEngine::init(
+        LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        0x10,
+        LIN_BROADCAST_NAD,
+        LinTpConfig {
+            n_cr_ms: 5,
+            max_pdu_len: 4095,
+        },
+    )
+    .unwrap();
+
+    engine
+        .on_lin_frame(
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            &[0x22, 0x10, 0x08, 0x62, 0xF1, 0x90, 0x01, 0x02],
+            0,
+        )
+        .unwrap();
+    assert!(engine.tick(6).is_err());
+    assert_eq!(engine.pop_error(), Some(TpError::RxTimeoutCr));
+}
+
+#[test]
+fn test_lintp_ffi_create_tx_and_free() {
+    let mut engine_ptr: *mut LinTpEngine = std::ptr::null_mut();
+    let cfg = lintp_default_config();
+    let rc = unsafe {
+        lintp_engine_new(
+            LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            0x10,
+            LIN_BROADCAST_NAD,
+            cfg,
+            &mut engine_ptr,
+        )
+    };
+    assert_eq!(rc, ISOTP_FFI_OK);
+    assert!(!engine_ptr.is_null());
+
+    let payload = [0x22u8, 0xF1, 0x90];
+    let rc = unsafe { lintp_tx_uds_msg(engine_ptr, payload.as_ptr(), payload.len(), 0, 0) };
+    assert_eq!(rc, ISOTP_FFI_OK);
+
+    let mut out_id = 0u8;
+    let mut out_len = 0usize;
+    let mut out_buf = [0u8; 8];
+    let rc = unsafe {
+        lintp_pop_tx_lin_frame(
+            engine_ptr,
+            &mut out_id,
+            out_buf.as_mut_ptr(),
+            out_buf.len(),
+            &mut out_len,
+        )
+    };
+    assert_eq!(rc, ISOTP_FFI_HAS_ITEM);
+    assert_eq!(out_id, LIN_MASTER_DIAGNOSTIC_FRAME_ID);
+    assert_eq!(
+        &out_buf[..out_len],
+        &[0x10, 0x03, 0x22, 0xF1, 0x90, 0x00, 0x00, 0x00]
+    );
+
+    unsafe { lintp_engine_free(engine_ptr) };
 }

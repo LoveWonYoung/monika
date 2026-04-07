@@ -10,6 +10,7 @@ extern "C" {
 
 /* Opaque engine handle. */
 typedef struct IsoTpEngine IsoTpEngine;
+typedef struct LinTpEngine LinTpEngine;
 
 /* C-compatible TP config (matches Rust repr(C) layout). */
 typedef struct IsoTpConfigC {
@@ -18,6 +19,12 @@ typedef struct IsoTpConfigC {
     uint8_t stmin_ms;
     uint8_t block_size;
 } IsoTpConfigC;
+
+/* C-compatible LIN TP config (matches Rust repr(C) layout). */
+typedef struct LinTpConfigC {
+    uint32_t n_cr_ms;
+    size_t max_pdu_len;
+} LinTpConfigC;
 
 /* C-compatible input CAN frame for batch ingest. */
 typedef struct IsoTpCanFrameInC {
@@ -52,6 +59,7 @@ enum {
 
 /* Returns default transport config. */
 IsoTpConfigC isotp_default_config(void);
+LinTpConfigC lintp_default_config(void);
 
 /*
  * Creates a new engine instance.
@@ -161,6 +169,55 @@ int32_t isotp_rx_uds_msg(
  *   <0 on error
  */
 int32_t isotp_pop_error(IsoTpEngine* engine, int32_t* out_error_code);
+
+/*
+ * LIN TP APIs (single-threaded; TP-only).
+ */
+int32_t lintp_engine_new(
+    uint8_t req_frame_id,
+    uint8_t resp_frame_id,
+    uint8_t req_nad,
+    uint8_t func_nad,
+    LinTpConfigC cfg,
+    LinTpEngine** out_engine
+);
+
+void lintp_engine_free(LinTpEngine* engine);
+
+int32_t lintp_on_lin_frame(
+    LinTpEngine* engine,
+    uint8_t id,
+    const uint8_t* data_ptr,
+    size_t data_len,
+    uint64_t ts_ms
+);
+
+int32_t lintp_tx_uds_msg(
+    LinTpEngine* engine,
+    const uint8_t* payload_ptr,
+    size_t payload_len,
+    uint8_t functional,
+    uint64_t ts_ms
+);
+
+int32_t lintp_tick(LinTpEngine* engine, uint64_t ts_ms);
+
+int32_t lintp_pop_tx_lin_frame(
+    LinTpEngine* engine,
+    uint8_t* out_id,
+    uint8_t* out_data_ptr,
+    size_t out_data_cap,
+    size_t* out_data_len
+);
+
+int32_t lintp_rx_uds_msg(
+    LinTpEngine* engine,
+    uint8_t* out_data_ptr,
+    size_t out_data_cap,
+    size_t* out_data_len
+);
+
+int32_t lintp_pop_error(LinTpEngine* engine, int32_t* out_error_code);
 
 #ifdef __cplusplus
 }

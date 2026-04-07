@@ -23,11 +23,11 @@ Windows output:
 python -m lib.demo
 ```
 
-`isotp_engine_ctypes.py` will load the default library path:
+`isotp_engine_ctypes.py` 与 `lintp_engine_ctypes.py` 都会加载默认库路径：
 - `./bin/<platform-lib-name>`
-- `../target/release/<platform-lib-name>` (auto-search upwards)
+- `../target/release/<platform-lib-name>`
 
-If needed, pass `lib_path="..."` to `IsoTpEngine(...)`.
+If needed, pass `lib_path="..."` to `IsoTpEngine(...)` or `LinTpEngine(...)`.
 
 ## Stress simulation (dual-end, large payload)
 
@@ -74,8 +74,18 @@ Behavior:
 Use:
 - `step_once(tp, rxfunc, txfunc, ...)`
 - `send_uds_and_wait_final(tp, payload, rxfunc, txfunc, ...)`
+- `step_once_lin(tp, rxfunc, txfunc, ...)`（from `lintp_engine_ctypes.py`）
+- `send_uds_and_wait_final_lin(tp, payload, rxfunc, txfunc, ...)`（from `lintp_engine_ctypes.py`）
 
 See runnable template:
 - `lib/real_device_template.py`
 
 Your `rxfunc()` should be non-blocking and return `None` when no frame is available.
+
+`LinTpEngine` 主要接口：
+- `on_lin_frame(frame_id, data, ts_ms=...)`
+- `tx_uds_msg(payload, functional=False, ts_ms=...)`
+- `tick(ts_ms=...)`
+- `pop_tx_lin_frame()`
+- `rx_uds_msg()`
+- `pop_error()`

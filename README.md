@@ -37,6 +37,15 @@ Python 绑定（`python/isotp_engine_ctypes.py`）：
 - `rx_uds_msg()`
 - `pop_error()`
 
+另外已提供 LIN TP 绑定（`python/lintp_engine_ctypes.py`）：
+- `LinTpEngine(req_frame_id, resp_frame_id, req_nad, func_nad, cfg)`
+- `on_lin_frame(frame_id, data, ts_ms=...)`
+- `tx_uds_msg(payload, functional=False, ts_ms=...)`
+- `tick(ts_ms=...)`
+- `pop_tx_lin_frame()`
+- `rx_uds_msg()`
+- `pop_error()`
+
 C ABI 返回语义：
 - `0`: 正常（且“无可弹出项”）
 - `1`: 成功弹出（`pop_tx_can_frame`/`rx_uds_msg`/`pop_error` 为 1 项；`pop_tx_can_frames` 为 >=1 项）

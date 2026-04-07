@@ -1,5 +1,6 @@
 use std::slice;
 
+use crate::lin_transport::{LinTpConfig, LinTpEngine};
 use crate::transport::{IsoTpEngine, TpConfig, TpError, TxPaddingMode};
 
 pub(crate) const ISOTP_FFI_OK: i32 = 0;
@@ -25,6 +26,13 @@ pub struct IsoTpConfigC {
     pub block_size: u8,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct LinTpConfigC {
+    pub n_cr_ms: u32,
+    pub max_pdu_len: usize,
+}
+
 impl From<IsoTpConfigC> for TpConfig {
     fn from(value: IsoTpConfigC) -> Self {
         Self {
@@ -33,6 +41,15 @@ impl From<IsoTpConfigC> for TpConfig {
             stmin_ms: value.stmin_ms,
             block_size: value.block_size,
             tx_padding: TxPaddingMode::Dlc,
+        }
+    }
+}
+
+impl From<LinTpConfigC> for LinTpConfig {
+    fn from(value: LinTpConfigC) -> Self {
+        Self {
+            n_cr_ms: value.n_cr_ms,
+            max_pdu_len: value.max_pdu_len,
         }
     }
 }
@@ -60,12 +77,21 @@ fn map_result_code(res: Result<(), TpError>) -> i32 {
     }
 }
 
-fn engine_mut<'a>(ptr: *mut IsoTpEngine) -> Result<&'a mut IsoTpEngine, i32> {
+fn isotp_engine_mut<'a>(ptr: *mut IsoTpEngine) -> Result<&'a mut IsoTpEngine, i32> {
     if ptr.is_null() {
         return Err(ISOTP_FFI_ERR_NULL_PTR);
     }
     // SAFETY: Pointer nullability is checked above. Caller must pass a valid engine pointer
     // obtained from `isotp_engine_new` and keep exclusive mutable access.
+    unsafe { Ok(&mut *ptr) }
+}
+
+fn lintp_engine_mut<'a>(ptr: *mut LinTpEngine) -> Result<&'a mut LinTpEngine, i32> {
+    if ptr.is_null() {
+        return Err(ISOTP_FFI_ERR_NULL_PTR);
+    }
+    // SAFETY: Pointer nullability is checked above. Caller must pass a valid engine pointer
+    // obtained from `lintp_engine_new` and keep exclusive mutable access.
     unsafe { Ok(&mut *ptr) }
 }
 
@@ -110,6 +136,15 @@ pub extern "C" fn isotp_default_config() -> IsoTpConfigC {
         n_cr_ms: cfg.n_cr_ms,
         stmin_ms: cfg.stmin_ms,
         block_size: cfg.block_size,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn lintp_default_config() -> LinTpConfigC {
+    let cfg = LinTpConfig::default();
+    LinTpConfigC {
+        n_cr_ms: cfg.n_cr_ms,
+        max_pdu_len: cfg.max_pdu_len,
     }
 }
 
@@ -166,7 +201,7 @@ pub unsafe extern "C" fn isotp_on_can_frame(
     is_fd: u8,
     ts_ms: u64,
 ) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
@@ -190,7 +225,7 @@ pub unsafe extern "C" fn isotp_on_can_frames(
     ts_ms: u64,
     out_processed: *mut usize,
 ) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
@@ -246,7 +281,7 @@ pub unsafe extern "C" fn isotp_tx_uds_msg(
     functional: u8,
     ts_ms: u64,
 ) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
@@ -261,7 +296,7 @@ pub unsafe extern "C" fn isotp_tx_uds_msg(
 /// # Safety
 /// `engine` must be a valid pointer returned by `isotp_engine_new`.
 pub unsafe extern "C" fn isotp_tick(engine: *mut IsoTpEngine, ts_ms: u64) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
@@ -280,7 +315,7 @@ pub unsafe extern "C" fn isotp_pop_tx_can_frame(
     out_data_cap: usize,
     out_data_len: *mut usize,
 ) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
@@ -329,7 +364,7 @@ pub unsafe extern "C" fn isotp_pop_tx_can_frames(
     max_frames: usize,
     out_count: *mut usize,
 ) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
@@ -410,7 +445,7 @@ pub unsafe extern "C" fn isotp_rx_uds_msg(
     out_data_cap: usize,
     out_data_len: *mut usize,
 ) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
@@ -448,7 +483,216 @@ pub unsafe extern "C" fn isotp_pop_error(
     engine: *mut IsoTpEngine,
     out_error_code: *mut i32,
 ) -> i32 {
-    let engine = match engine_mut(engine) {
+    let engine = match isotp_engine_mut(engine) {
+        Ok(engine) => engine,
+        Err(code) => return code,
+    };
+
+    let Some(err) = engine.error_front() else {
+        return ISOTP_FFI_OK;
+    };
+
+    if out_error_code.is_null() {
+        return ISOTP_FFI_ERR_NULL_PTR;
+    }
+
+    // SAFETY: out_error_code is checked non-null above.
+    unsafe {
+        *out_error_code = tp_error_to_code(err);
+    }
+    engine.error_drop_front();
+    ISOTP_FFI_HAS_ITEM
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `out_engine` must be a valid non-null pointer to writable memory for one `*mut LinTpEngine`.
+pub unsafe extern "C" fn lintp_engine_new(
+    req_frame_id: u8,
+    resp_frame_id: u8,
+    req_nad: u8,
+    func_nad: u8,
+    cfg: LinTpConfigC,
+    out_engine: *mut *mut LinTpEngine,
+) -> i32 {
+    if out_engine.is_null() {
+        return ISOTP_FFI_ERR_NULL_PTR;
+    }
+
+    let engine = match LinTpEngine::init(req_frame_id, resp_frame_id, req_nad, func_nad, cfg.into())
+    {
+        Ok(engine) => engine,
+        Err(err) => return tp_error_to_code(&err),
+    };
+
+    let boxed = Box::new(engine);
+    // SAFETY: out_engine is checked non-null above and points to writable memory provided by caller.
+    unsafe {
+        *out_engine = Box::into_raw(boxed);
+    }
+    ISOTP_FFI_OK
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a pointer previously returned by `lintp_engine_new` and freed at most once.
+pub unsafe extern "C" fn lintp_engine_free(engine: *mut LinTpEngine) {
+    if engine.is_null() {
+        return;
+    }
+    // SAFETY: Pointer comes from `Box::into_raw` in `lintp_engine_new`, and must be freed once.
+    unsafe {
+        drop(Box::from_raw(engine));
+    }
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a valid pointer returned by `lintp_engine_new`.
+/// `data_ptr` must point to `data_len` readable bytes when `data_len > 0`.
+pub unsafe extern "C" fn lintp_on_lin_frame(
+    engine: *mut LinTpEngine,
+    id: u8,
+    data_ptr: *const u8,
+    data_len: usize,
+    ts_ms: u64,
+) -> i32 {
+    let engine = match lintp_engine_mut(engine) {
+        Ok(engine) => engine,
+        Err(code) => return code,
+    };
+    let data = match data_slice(data_ptr, data_len) {
+        Ok(data) => data,
+        Err(code) => return code,
+    };
+    map_result_code(engine.on_lin_frame(id, data, ts_ms))
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a valid pointer returned by `lintp_engine_new`.
+/// `payload_ptr` must point to `payload_len` readable bytes when `payload_len > 0`.
+pub unsafe extern "C" fn lintp_tx_uds_msg(
+    engine: *mut LinTpEngine,
+    payload_ptr: *const u8,
+    payload_len: usize,
+    functional: u8,
+    ts_ms: u64,
+) -> i32 {
+    let engine = match lintp_engine_mut(engine) {
+        Ok(engine) => engine,
+        Err(code) => return code,
+    };
+    let payload = match data_slice(payload_ptr, payload_len) {
+        Ok(payload) => payload,
+        Err(code) => return code,
+    };
+    map_result_code(engine.tx_uds_msg(payload, functional != 0, ts_ms))
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a valid pointer returned by `lintp_engine_new`.
+pub unsafe extern "C" fn lintp_tick(engine: *mut LinTpEngine, ts_ms: u64) -> i32 {
+    let engine = match lintp_engine_mut(engine) {
+        Ok(engine) => engine,
+        Err(code) => return code,
+    };
+    map_result_code(engine.tick(ts_ms))
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a valid pointer returned by `lintp_engine_new`.
+/// Output pointers must be valid for writes per their associated sizes.
+pub unsafe extern "C" fn lintp_pop_tx_lin_frame(
+    engine: *mut LinTpEngine,
+    out_id: *mut u8,
+    out_data_ptr: *mut u8,
+    out_data_cap: usize,
+    out_data_len: *mut usize,
+) -> i32 {
+    let engine = match lintp_engine_mut(engine) {
+        Ok(engine) => engine,
+        Err(code) => return code,
+    };
+
+    let Some((id, data)) = engine.tx_front_data() else {
+        return ISOTP_FFI_OK;
+    };
+
+    if out_id.is_null() || out_data_len.is_null() {
+        return ISOTP_FFI_ERR_NULL_PTR;
+    }
+    if data.len() > out_data_cap {
+        return ISOTP_FFI_ERR_BUFFER_TOO_SMALL;
+    }
+
+    let out_data = match out_data_slice(out_data_ptr, out_data_cap) {
+        Ok(data) => data,
+        Err(code) => return code,
+    };
+    out_data[..data.len()].copy_from_slice(data);
+
+    // SAFETY: output pointers are checked non-null above and valid per caller contract.
+    unsafe {
+        *out_id = id;
+        *out_data_len = data.len();
+    }
+    engine.tx_drop_front_frame();
+    ISOTP_FFI_HAS_ITEM
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a valid pointer returned by `lintp_engine_new`.
+/// `out_data_ptr` must be valid for `out_data_cap` writable bytes.
+/// `out_data_len` must be a valid writable pointer.
+pub unsafe extern "C" fn lintp_rx_uds_msg(
+    engine: *mut LinTpEngine,
+    out_data_ptr: *mut u8,
+    out_data_cap: usize,
+    out_data_len: *mut usize,
+) -> i32 {
+    let engine = match lintp_engine_mut(engine) {
+        Ok(engine) => engine,
+        Err(code) => return code,
+    };
+
+    let Some(msg) = engine.rx_front_msg() else {
+        return ISOTP_FFI_OK;
+    };
+
+    if out_data_len.is_null() {
+        return ISOTP_FFI_ERR_NULL_PTR;
+    }
+    if msg.len() > out_data_cap {
+        return ISOTP_FFI_ERR_BUFFER_TOO_SMALL;
+    }
+
+    let out_data = match out_data_slice(out_data_ptr, out_data_cap) {
+        Ok(data) => data,
+        Err(code) => return code,
+    };
+    out_data[..msg.len()].copy_from_slice(msg);
+
+    // SAFETY: out_data_len is checked non-null above.
+    unsafe {
+        *out_data_len = msg.len();
+    }
+    engine.rx_drop_front_msg();
+    ISOTP_FFI_HAS_ITEM
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a valid pointer returned by `lintp_engine_new`.
+/// `out_error_code` must be a valid writable pointer.
+pub unsafe extern "C" fn lintp_pop_error(
+    engine: *mut LinTpEngine,
+    out_error_code: *mut i32,
+) -> i32 {
+    let engine = match lintp_engine_mut(engine) {
         Ok(engine) => engine,
         Err(code) => return code,
     };
