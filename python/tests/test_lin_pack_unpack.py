@@ -8,7 +8,8 @@ PYTHON_DIR = THIS_FILE.parents[1]
 if str(PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(PYTHON_DIR))
 
-from lintp_engine_ctypes import LinTpConfig, LinTpEngine
+from lib.isotp_engine_ctypes import IsoTpError
+from lintp_engine_ctypes import LinMsg, LinTpConfig, LinTpEngine, send_uds_and_wait_final_lin
 
 REQ_FRAME_ID = 0x3C
 RESP_FRAME_ID = 0x3D
@@ -76,6 +77,66 @@ class LinPackUnpackTests(unittest.TestCase):
             self.assertEqual(ecu_got, req_payload)
             self.assertTrue(any((data[1] & 0xF0) == 0x10 for _, data in tester_sent))
             self.assertTrue(any((data[1] & 0xF0) == 0x20 for _, data in tester_sent))
+
+    def test_lin_functional_single_frame_uses_func_nad(self):
+        with LinTpEngine(REQ_FRAME_ID, RESP_FRAME_ID, REQ_NAD, FUNC_NAD, cfg=_cfg_fast()) as tp:
+            tp.tx_uds_msg(bytes([0x3E, 0x00]), functional=True, ts_ms=0)
+            frame_id, data = tp.pop_tx_lin_frame()
+            self.assertEqual(frame_id, REQ_FRAME_ID)
+            self.assertEqual(data[0], FUNC_NAD)
+            self.assertEqual(data[1], 0x02)
+            self._assert_no_err(tp, "lin_functional_sf")
+
+    def test_lin_sequence_mismatch_reports_error(self):
+        with LinTpEngine(REQ_FRAME_ID, RESP_FRAME_ID, REQ_NAD, FUNC_NAD, cfg=_cfg_fast()) as tp:
+            tp.on_lin_frame(RESP_FRAME_ID, bytes([0x22, 0x10, 0x08, 0x62, 0xF1, 0x90, 0x01, 0x02]), ts_ms=0)
+            with self.assertRaises(IsoTpError) as ctx:
+                tp.on_lin_frame(RESP_FRAME_ID, bytes([0x22, 0x22, 0x03, 0x04, 0x05, 0, 0, 0]), ts_ms=1)
+            self.assertEqual(ctx.exception.code, -107)
+            self.assertEqual(tp.pop_error(), -107)
+
+    def test_lin_tick_timeout_reports_error(self):
+        with LinTpEngine(
+            REQ_FRAME_ID,
+            RESP_FRAME_ID,
+            REQ_NAD,
+            FUNC_NAD,
+            cfg=LinTpConfig(n_cr_ms=5, max_pdu_len=4095),
+        ) as tp:
+            tp.on_lin_frame(RESP_FRAME_ID, bytes([0x22, 0x10, 0x08, 0x62, 0xF1, 0x90, 0x01, 0x02]), ts_ms=0)
+            with self.assertRaises(IsoTpError) as ctx:
+                tp.tick(ts_ms=6)
+            self.assertEqual(ctx.exception.code, -106)
+            self.assertEqual(tp.pop_error(), -106)
+
+    def test_lin_send_uds_and_wait_final_handles_pending(self):
+        with LinTpEngine(REQ_FRAME_ID, RESP_FRAME_ID, REQ_NAD, FUNC_NAD, cfg=_cfg_fast()) as tp:
+            incoming = [
+                LinMsg(RESP_FRAME_ID, bytes([0x22, 0x03, 0x7F, 0x22, 0x78, 0x00, 0x00, 0x00])),
+                LinMsg(RESP_FRAME_ID, bytes([0x22, 0x03, 0x62, 0xF1, 0x90, 0x00, 0x00, 0x00])),
+            ]
+            sent: list[tuple[int, bytes]] = []
+
+            def rxfunc():
+                if incoming:
+                    return incoming.pop(0)
+                return None
+
+            def txfunc(frame_id: int, data: bytes):
+                sent.append((frame_id, data))
+
+            rsp = send_uds_and_wait_final_lin(
+                tp=tp,
+                payload=bytes([0x22, 0xF1, 0x90]),
+                rxfunc=rxfunc,
+                txfunc=txfunc,
+                overall_timeout_ms=500,
+                pending_gap_ms=200,
+                poll_interval_ms=0,
+            )
+            self.assertEqual(rsp, bytes([0x62, 0xF1, 0x90]))
+            self.assertTrue(len(sent) >= 1)
+            self.assertEqual(sent[0][0], REQ_FRAME_ID)
 
 
 if __name__ == "__main__":

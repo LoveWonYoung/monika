@@ -40,3 +40,9 @@ htmlcov/
 
 # Local Python version file
 .python-version
+
+# macOS / IDE
+.DS_Store
+**/.DS_Store
+.idea/
+**/.idea/

@@ -4,7 +4,7 @@ from ctypes import POINTER, Structure, byref, c_int32, c_size_t, c_uint32, c_uin
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
-from isotp_engine_ctypes import (
+from lib.isotp_engine_ctypes import (
     FFI_HAS_ITEM,
     FFI_OK,
     IsoTpError,
