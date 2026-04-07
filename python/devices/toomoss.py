@@ -8,7 +8,7 @@ from core.types import RawCanMsg
 
 from .exceptions import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
 from .interface import MyHwDeviceInterface
-from .usb2canfd import (
+from .toomoss_usb2canfd import (
     CANFD_GetCANSpeedArg,
     CANFD_GetMsg,
     CANFD_Init,
@@ -22,7 +22,7 @@ from .usb2canfd import (
     CANFD_StopGetMsg,
     CANFD_SUCCESS,
 )
-from .usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice
+from .toomoss_usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice
 
 ToomossCAN1 = 0
 ToomossCAN2 = 1
@@ -69,8 +69,8 @@ def _format_can_frame(can_id: int, data: bytes, is_fd: bool) -> str:
 
 def _print_can_frame(direction: str, can_id: int, data: bytes, is_fd: bool) -> None:
     now = time.time()
-    ts = time.strftime("%H:%M:%S", time.localtime(now)) + f".{int((now % 1) * 1000):03d}"
-    message = f"[{ts}] {direction} {_format_can_frame(can_id, data, is_fd)}"
+    # ts = time.strftime("%H:%M:%S", time.localtime(now)) + f".{int((now % 1) * 1000):03d}"
+    message = f"{direction} {_format_can_frame(can_id, data, is_fd)}"
     if logging.getLogger().hasHandlers():
         logger.info(message)
     else:

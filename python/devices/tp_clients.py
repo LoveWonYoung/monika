@@ -127,7 +127,7 @@ class MyHwDeviceWithTpEngine:
         return self._tp.pop_error()
 
 
-class MyHwDeviceWithTpWorker:
+class TpWorker:
     """Compose a hardware adapter with IsoTpEngineWorker and a bridge thread."""
 
     def __init__(

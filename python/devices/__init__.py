@@ -1,6 +1,6 @@
 from .exceptions import DeviceError, DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
 from .toomoss import Toomoss
-from .tp_clients import MyHwDeviceWithTpEngine, MyHwDeviceWithTpWorker
+from .tp_clients import MyHwDeviceWithTpEngine, TpWorker
 
 __all__ = [
 	"DeviceError",
@@ -10,5 +10,5 @@ __all__ = [
 	"DeviceSendError",
 	"Toomoss",
 	"MyHwDeviceWithTpEngine",
-	"MyHwDeviceWithTpWorker",
+	"TpWorker",
 ]
