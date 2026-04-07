@@ -19,12 +19,13 @@ Windows output:
 ## Run demo
 
 ```bash
-# from repo root
-python3 python/demo.py
+# from this python workspace root
+python -m lib.demo
 ```
 
 `isotp_engine_ctypes.py` will load the default library path:
-- `../target/release/<platform-lib-name>`
+- `./bin/<platform-lib-name>`
+- `../target/release/<platform-lib-name>` (auto-search upwards)
 
 If needed, pass `lib_path="..."` to `IsoTpEngine(...)`.
 
@@ -37,8 +38,8 @@ This script creates two Rust ISO-TP endpoints in one Python process:
 It pumps CAN frames between both sides, feeds `tick()`, and validates request/response payload integrity.
 
 ```bash
-# from repo root
-python3 python/stress_sim.py --cases 2000 --max-req-len 4095 --max-rsp-len 4095
+# from this python workspace root
+python -m lib.stress_sim --cases 2000 --max-req-len 4095 --max-rsp-len 4095
 ```
 
 `IsoTpEngine` 现已支持批量 FFI：
@@ -50,8 +51,8 @@ python3 python/stress_sim.py --cases 2000 --max-req-len 4095 --max-rsp-len 4095
 ## CAN / CAN-FD pack-unpack tests
 
 ```bash
-# from repo root
-python3 -m unittest discover -s python/tests -p "test_*.py" -v
+# from this python workspace root
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 ## Handle UDS NRC 0x78 (ResponsePending)
@@ -75,6 +76,6 @@ Use:
 - `send_uds_and_wait_final(tp, payload, rxfunc, txfunc, ...)`
 
 See runnable template:
-- `python/real_device_template.py`
+- `lib/real_device_template.py`
 
 Your `rxfunc()` should be non-blocking and return `None` when no frame is available.

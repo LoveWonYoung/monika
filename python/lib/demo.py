@@ -1,6 +1,9 @@
 import time
 
-from isotp_engine_ctypes import IsoTpEngineWorker
+try:
+    from .isotp_engine_ctypes import IsoTpEngineWorker
+except ImportError:
+    from lib.isotp_engine_ctypes import IsoTpEngineWorker
 
 
 def drain_tx(tp_worker: IsoTpEngineWorker, duration_s: float = 0.05):

@@ -4,6 +4,7 @@ import platform
 import queue
 import threading
 import time
+import traceback
 from ctypes import (
     POINTER,
     Structure,
@@ -34,6 +35,7 @@ ERR_MAP = {
     -108: "FlowControlOverflow",
     -109: "UnexpectedFlowStatus",
     -110: "ParseError",
+    -9999: "WorkerThreadException",
 }
 
 
@@ -213,8 +215,33 @@ def _default_lib_path() -> str:
         filename = "isotp_engine.dll"
     else:
         filename = "libisotp_engine.so"
-    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base, "target", "release", filename)
+
+    env_path = os.getenv("ISOTP_ENGINE_LIB")
+    candidates: List[str] = []
+    if env_path:
+        candidates.append(os.path.abspath(env_path))
+
+    module_dir = os.path.abspath(os.path.dirname(__file__))
+    project_dir = os.path.abspath(os.path.join(module_dir, ".."))
+    # Prefer project-local ./bin first (e.g. repo layout with copied runtime DLL).
+    candidates.append(os.path.join(project_dir, "bin", filename))
+
+    # Search upward from this file so directory layout changes do not break loading.
+    cur = module_dir
+    while True:
+        candidates.append(os.path.join(cur, "target", "release", filename))
+        candidates.append(os.path.join(cur, "target", "debug", filename))
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+
+    # Keep backward compatibility: return the first candidate and let CDLL raise details.
+    return candidates[0]
 
 
 class IsoTpEngine:
@@ -227,7 +254,11 @@ class IsoTpEngine:
         cfg: Optional[TpConfig] = None,
         lib_path: Optional[str] = None,
     ):
-        self._lib = ctypes.CDLL(lib_path or _default_lib_path())
+        resolved_lib_path = lib_path or _default_lib_path()
+        try:
+            self._lib = ctypes.CDLL(resolved_lib_path)
+        except OSError as exc:
+            raise RuntimeError(f"Failed to load IsoTpEngine shared library: {resolved_lib_path}") from exc
         self._bind()
 
         if cfg is None:
@@ -653,6 +684,7 @@ class IsoTpEngineWorker:
         self._tx_can_q: "queue.Queue[Tuple[int, bytes, bool]]" = queue.Queue()
         self._rx_uds_q: "queue.Queue[bytes]" = queue.Queue()
         self._err_q: "queue.Queue[int]" = queue.Queue()
+        self._worker_exception_text: Optional[str] = None
 
         self._stop_evt = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -753,6 +785,8 @@ class IsoTpEngineWorker:
         while monotonic_ms() <= end_at:
             err = self.pop_error(timeout_s=0.0)
             if err is not None:
+                if err == -9999 and self._worker_exception_text:
+                    raise RuntimeError(self._worker_exception_text)
                 raise IsoTpError(err)
 
             timeout_s = poll_interval_ms / 1000.0 if poll_interval_ms > 0 else 0.0
@@ -840,4 +874,5 @@ class IsoTpEngineWorker:
                     if sleep_ms > 0:
                         time.sleep(sleep_ms / 1000.0)
         except Exception:
+            self._worker_exception_text = traceback.format_exc().strip()
             self._err_q.put(-9999)

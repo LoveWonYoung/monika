@@ -1,14 +1,8 @@
-from dataclasses import dataclass
 from typing import Optional
 
-from isotp_engine_ctypes import CanMsg, IsoTpEngine, TpConfig, send_uds_and_wait_final
+from core.types import RawCanMsg
 
-
-@dataclass
-class RawCanMsg:
-    id: int
-    data: bytes
-    isfd: bool
+from .isotp_engine_ctypes import CanMsg, IsoTpEngine, TpConfig, send_uds_and_wait_final
 
 
 def txfunc(can_id: int, data: bytes, is_fd: bool) -> None:

@@ -4,7 +4,10 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from isotp_engine_ctypes import IsoTpEngine, TpConfig
+try:
+    from .isotp_engine_ctypes import IsoTpEngine, TpConfig
+except ImportError:
+    from lib.isotp_engine_ctypes import IsoTpEngine, TpConfig
 
 
 @dataclass
