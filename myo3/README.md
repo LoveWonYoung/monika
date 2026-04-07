@@ -73,8 +73,8 @@ python -m isotp_engine.lin_device.main
 
 ```python
 from isotp_engine.bindings import IsoTpEngine, LinTpEngine, TpConfig, LinTpConfig
-from isotp_engine.can_device.clients import CanTpWorker
-from isotp_engine.lin_device.clients import LinTpWorker
+from isotp_engine.can_device.worker import CanTpWorker
+from isotp_engine.lin_device.worker import LinTpWorker
 ```
 
 ## Notes

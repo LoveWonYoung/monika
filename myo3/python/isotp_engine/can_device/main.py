@@ -4,7 +4,7 @@ from ..hw.errors import DeviceError
 from ..utils.log_recorder import init_and_rotate
 
 from . import Toomoss
-from .clients import CanTpWorker
+from .worker import CanTpWorker
 
 
 def main() -> None:

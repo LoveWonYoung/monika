@@ -4,7 +4,7 @@ from typing import Optional
 
 
 from isotp_engine.core.types import RawLinMsg
-from isotp_engine.lin_device.clients import LinTpWorker
+from isotp_engine.lin_device.worker import LinTpWorker
 
 
 class _FakeLinMasterHw:

@@ -1,4 +1,4 @@
-from .clients import CanTpClient, CanTpWorker, MyHwDeviceWithTpEngine, TpWorker
+from .worker import CanTpClient, CanTpWorker, MyHwDeviceWithTpEngine, TpWorker
 from .fakes import FakeEcu
 from .interface import CanDeviceInterface, MyHwDeviceInterface
 

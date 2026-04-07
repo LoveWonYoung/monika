@@ -4,7 +4,7 @@ from ..hw.errors import DeviceError
 from ..utils.log_recorder import init_and_rotate
 
 from . import ToomossLin
-from .clients import LinTpWorker
+from .worker import LinTpWorker
 
 
 def main() -> None:

@@ -1,4 +1,4 @@
-from .clients import LinTpWorker
+from .worker import LinTpWorker
 
 try:
     from .toomoss import ToomossLin
