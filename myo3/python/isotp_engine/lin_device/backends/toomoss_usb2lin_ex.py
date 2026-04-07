@@ -4,7 +4,7 @@
 """
 from ctypes import *
 import platform
-from ..hw.toomoss_usb_device import USB2XXXLib
+from ...hw.toomoss_usb_device import USB2XXXLib
 
 # 定义函数返回错误代码
 LIN_EX_SUCCESS            = (0)   # 函数执行成功

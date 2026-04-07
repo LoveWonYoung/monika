@@ -2,7 +2,7 @@
 文件说明：USB2XXX CANFD操作相关函数集合
 更多帮助：www.toomoss.com
 """
-from ..hw.toomoss_usb_device import *
+from ...hw.toomoss_usb_device import *
 
 # 1.CANFD信息帧的数据类型定义
 class CANFD_MSG(Structure):

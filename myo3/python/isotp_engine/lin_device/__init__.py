@@ -1,7 +1,7 @@
 from .worker import LinTpWorker
 
 try:
-    from .toomoss import ToomossLin
+    from .backends.toomoss import ToomossLin
 except (ImportError, OSError, RuntimeError):
     ToomossLin = None
 

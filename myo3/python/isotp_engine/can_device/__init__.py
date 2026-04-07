@@ -1,9 +1,9 @@
 from .worker import CanTpClient, CanTpWorker, MyHwDeviceWithTpEngine, TpWorker
-from .fakes import FakeEcu
+from .fake import FakeEcu
 from .interface import CanDeviceInterface, MyHwDeviceInterface
 
 try:
-    from .toomoss import Toomoss
+    from .backends.toomoss import Toomoss
 except (ImportError, OSError, RuntimeError):
     Toomoss = None
 
