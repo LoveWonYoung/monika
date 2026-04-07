@@ -767,7 +767,7 @@ class IsoTpEngineWorker:
     def wait_uds_final_response(
         self,
         overall_timeout_ms: int = 10000,
-        pending_gap_ms: int = 3000,
+        pending_gap_ms: int = 5000,
         poll_interval_ms: int = 1,
         response_matcher: Optional[Callable[[bytes], bool]] = None,
     ) -> bytes:

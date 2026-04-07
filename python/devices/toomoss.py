@@ -1,3 +1,4 @@
+import logging
 import time
 from collections import deque
 from ctypes import byref, c_uint
@@ -23,9 +24,11 @@ from .usb2canfd import (
 )
 from .usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice
 
-CAN1 = 0
+ToomossCAN1 = 0
+ToomossCAN2 = 1
 CANFD_DLC_TO_LEN = (0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64)
 CANFD_LEN_TO_DLC = {length: dlc for dlc, length in enumerate(CANFD_DLC_TO_LEN)}
+logger = logging.getLogger(__name__)
 
 
 def _len_to_device_dlc(payload_len: int, is_fd: bool) -> int:
@@ -61,21 +64,25 @@ def _format_can_frame(can_id: int, data: bytes, is_fd: bool) -> str:
     frame_type = "CAN-FD" if is_fd else "CAN"
     data_hex = data.hex(" ") if data else ""
     dlc = _len_to_std_dlc(len(data), is_fd)
-    return f"Id=0x{can_id:03X} Type={frame_type} DLC={dlc:02} Data=[{data_hex}]"
+    return f"ID=0x{can_id:03X} Type={frame_type} DLC={dlc:02} Data=[{data_hex}]"
 
 
 def _print_can_frame(direction: str, can_id: int, data: bytes, is_fd: bool) -> None:
     now = time.time()
     ts = time.strftime("%H:%M:%S", time.localtime(now)) + f".{int((now % 1) * 1000):03d}"
-    print(f"[{ts}] {direction} {_format_can_frame(can_id, data, is_fd)}")
+    message = f"[{ts}] {direction} {_format_can_frame(can_id, data, is_fd)}"
+    if logging.getLogger().hasHandlers():
+        logger.info(message)
+    else:
+        print(message)
 
 
-class MyHwDevice(MyHwDeviceInterface):
+class Toomoss(MyHwDeviceInterface):
     """Hardware adapter over USB2XXX CAN/CAN-FD API."""
 
     def __init__(
         self,
-        channel: int = CAN1,
+        channel: int = ToomossCAN1,
         rx_buffer_size: int = 1024,
         poll_batch_size: int = 1024,
         log_frames: bool = True,
@@ -107,6 +114,18 @@ class MyHwDevice(MyHwDeviceInterface):
             raise DeviceOpenError(f"Failed to open USB2XXX device handle={self._dev_handle}")
 
         can_cfg = CANFD_INIT_CONFIG()
+        can_cfg.Mode=         0
+        can_cfg.RetrySend=    1
+        can_cfg.ISOCRCEnable= 1
+        can_cfg.ResEnable=    1
+        can_cfg.NBT_BRP=      1
+        can_cfg.NBT_SEG1=     59
+        can_cfg.NBT_SEG2=     20
+        can_cfg.NBT_SJW=      2
+        can_cfg.DBT_BRP=      1
+        can_cfg.DBT_SEG1=     14
+        can_cfg.DBT_SEG2=     5
+        can_cfg.DBT_SJW=      2
         ret = CANFD_GetCANSpeedArg(self._dev_handle, byref(can_cfg), 500000, 2000000)
         if ret != CANFD_SUCCESS:
             self.close()

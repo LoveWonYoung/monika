@@ -1,10 +1,10 @@
 from .fakes import FakeEcu
-from .hw_device import MyHwDevice
+from .toomoss import Toomoss
 from .tp_clients import MyHwDeviceWithTpEngine, MyHwDeviceWithTpWorker
 
 
 def demo() -> None:
-    with MyHwDevice() as hw:
+    with Toomoss() as hw:
         with MyHwDeviceWithTpEngine(hw=hw, req_id=0x7E0, resp_id=0x7E8, func_id=0x7DF, is_fd=False) as dev:
             req = bytes([0x22, 0xF1, 0x90])
             rsp = dev.uds_request(req)
@@ -13,7 +13,7 @@ def demo() -> None:
 
 
 def demo_worker() -> None:
-    with MyHwDevice() as hw:
+    with Toomoss() as hw:
         for _ in range(50):
             hw.txfn(0x482, bytes([0] * 8), True)
         with MyHwDeviceWithTpWorker(hw=hw, req_id=0x5B1, resp_id=0x5B9, func_id=0x7DF, is_fd=True) as dev:
@@ -28,7 +28,7 @@ _FakeEcu = FakeEcu
 
 
 __all__ = [
-    "MyHwDevice",
+    "Toomoss",
     "MyHwDeviceWithTpEngine",
     "MyHwDeviceWithTpWorker",
     "FakeEcu",

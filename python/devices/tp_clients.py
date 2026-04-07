@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 from typing import Optional
@@ -13,6 +14,9 @@ from lib.isotp_engine_ctypes import (
 )
 
 from .interface import MyHwDeviceInterface
+
+
+logger = logging.getLogger(__name__)
 
 
 class MyHwDeviceWithTpEngine:
@@ -91,8 +95,8 @@ class MyHwDeviceWithTpEngine:
                     )
                     step_once(tp=self._tp, rxfunc=self._rxfunc_for_isotp, txfunc=self._hw.txfn)
                     self._tp.clear_pending_uds_messages()
-            except Exception as exc:
-                print(f"keep_alive error: {exc}")
+            except Exception:
+                logger.exception("keep_alive error")
 
             evt.wait(interval_s)
 
@@ -227,8 +231,8 @@ class MyHwDeviceWithTpWorker:
                     functional=functional,
                     response_timeout_ms=None,
                 )
-            except Exception as exc:
-                print(f"worker keep_alive error: {exc}")
+            except Exception:
+                logger.exception("worker keep_alive error")
 
             evt.wait(interval_s)
 
