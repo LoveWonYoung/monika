@@ -20,12 +20,14 @@ class _FakeLinMasterHw:
         self.resp_frame_id = resp_frame_id
         self._scheduled_slave_rsp: deque[RawLinMsg] = deque()
         self._rx_q: deque[RawLinMsg] = deque()
+        self.tx_nad_history: list[int] = []
 
     def txfn(self, frame_id: int, data: bytes) -> None:
         if frame_id != self.req_frame_id:
             return
         if len(data) != 8:
             return
+        self.tx_nad_history.append(int(data[0]) & 0xFF)
 
         # Handle request single-frame: NAD + PCI(len) + UDS...
         if (data[1] & 0xF0) != 0x00:
@@ -69,6 +71,25 @@ class LinTpWorkerBridgeTests(unittest.TestCase):
             rsp = dev.uds_request(bytes([0x22, 0xF1, 0x90]), timeout_ms=1000)
             self.assertEqual(rsp, bytes([0x62, 0xF1, 0x90]))
             self.assertIsNone(dev.pop_error(timeout_s=0.0))
+
+    def test_lin_tp_worker_can_override_req_nad_per_request(self):
+        hw = _FakeLinMasterHw(req_frame_id=0x3C, resp_frame_id=0x3D)
+        with LinTpWorker(
+            hw=hw,
+            req_frame_id=0x3C,
+            resp_frame_id=0x3D,
+            req_nad=0x10,
+            func_nad=0x7F,
+            tick_period_ms=1,
+            bridge_sleep_ms=1,
+        ) as dev:
+            rsp1 = dev.uds_request(bytes([0x22, 0xF1, 0x90]), timeout_ms=1000, req_nad=0x10)
+            rsp2 = dev.uds_request(bytes([0x22, 0xF1, 0x90]), timeout_ms=1000, req_nad=0x22)
+            self.assertEqual(rsp1, bytes([0x62, 0xF1, 0x90]))
+            self.assertEqual(rsp2, bytes([0x62, 0xF1, 0x90]))
+
+        self.assertIn(0x10, hw.tx_nad_history)
+        self.assertIn(0x22, hw.tx_nad_history)
 
 
 if __name__ == "__main__":

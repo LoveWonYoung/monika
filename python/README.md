@@ -112,7 +112,14 @@ from devices.toomoss import ToomossLin
 from devices.tp_clients import LinTpWorker
 
 with ToomossLin(channel=0, baudrate=19200, master=True) as hw:
-    with LinTpWorker(hw=hw, req_frame_id=0x3C, resp_frame_id=0x3D, req_nad=0x10, func_nad=0x7F) as dev:
+    with LinTpWorker(
+        hw=hw,
+        req_frame_id=0x3C,
+        resp_frame_id=0x3D,
+        req_nad=0x10,
+        func_nad=0x7F,
+        resp_poll_interval_ms=15,  # 3D header poll period, typical values: 10/15/20
+    ) as dev:
         rsp = dev.uds_request(bytes([0x22, 0xF1, 0x90]))
         print(rsp.hex(" "))
 ```

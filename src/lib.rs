@@ -7,8 +7,8 @@ pub use ffi::{
     isotp_engine_new, isotp_on_can_frame, isotp_on_can_frames, isotp_pop_error,
     isotp_pop_tx_can_frame, isotp_pop_tx_can_frames, isotp_rx_uds_msg, isotp_tick,
     isotp_tx_uds_msg, lintp_default_config, lintp_engine_free, lintp_engine_new,
-    lintp_on_lin_frame, lintp_pop_error, lintp_pop_tx_lin_frame, lintp_rx_uds_msg, lintp_tick,
-    lintp_tx_uds_msg,
+    lintp_on_lin_frame, lintp_pop_error, lintp_pop_tx_lin_frame, lintp_rx_uds_msg, lintp_set_nad,
+    lintp_tick, lintp_tx_uds_msg,
 };
 pub use lin_transport::{
     LIN_BROADCAST_NAD, LIN_MASTER_DIAGNOSTIC_FRAME_ID, LIN_PCI_TYPE_CONSECUTIVE_FRAME,

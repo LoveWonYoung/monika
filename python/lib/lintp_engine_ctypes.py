@@ -29,6 +29,8 @@ class LinMsg:
 class _LinTxRequest:
     payload: bytes
     functional: bool
+    req_nad: Optional[int] = None
+    func_nad: Optional[int] = None
 
 
 class _LinTpConfigC(Structure):
@@ -62,6 +64,8 @@ class LinTpEngine:
     ):
         self._lib = ctypes.CDLL(lib_path or _default_lib_path())
         self._bind()
+        self._req_nad = int(req_nad) & 0xFF
+        self._func_nad = int(func_nad) & 0xFF
 
         if cfg is None:
             c_cfg = self._lib.lintp_default_config()
@@ -72,8 +76,8 @@ class LinTpEngine:
         rc = self._lib.lintp_engine_new(
             c_uint8(req_frame_id),
             c_uint8(resp_frame_id),
-            c_uint8(req_nad),
-            c_uint8(func_nad),
+            c_uint8(self._req_nad),
+            c_uint8(self._func_nad),
             c_cfg,
             byref(engine_ptr),
         )
@@ -113,10 +117,32 @@ class LinTpEngine:
         if rc != FFI_OK:
             raise IsoTpError(rc)
 
+    def set_nad(self, req_nad: Optional[int] = None, func_nad: Optional[int] = None) -> None:
+        if req_nad is None and func_nad is None:
+            return
+        if not self._has_set_nad:
+            raise RuntimeError(
+                "Current isotp_engine dynamic library does not export lintp_set_nad. "
+                "Please rebuild/update the library."
+            )
+        new_req_nad = self._req_nad if req_nad is None else (int(req_nad) & 0xFF)
+        new_func_nad = self._func_nad if func_nad is None else (int(func_nad) & 0xFF)
+        rc = self._lib.lintp_set_nad(
+            self._engine,
+            c_uint8(new_req_nad),
+            c_uint8(new_func_nad),
+        )
+        if rc != FFI_OK:
+            raise IsoTpError(rc)
+        self._req_nad = new_req_nad
+        self._func_nad = new_func_nad
+
     def tx_uds_msg(
         self,
         payload: bytes,
         functional: bool = False,
+        req_nad_override: Optional[int] = None,
+        func_nad_override: Optional[int] = None,
         ts_ms: Optional[int] = None,
         response_timeout_ms: Optional[int] = None,
         pending_gap_ms: int = 3000,
@@ -125,6 +151,7 @@ class LinTpEngine:
         response_matcher: Optional[Callable[[bytes], bool]] = None,
         flush_before_send: bool = True,
     ) -> Optional[bytes]:
+        self.set_nad(req_nad=req_nad_override, func_nad=func_nad_override)
         if response_timeout_ms is not None and flush_before_send:
             self.clear_pending_uds_messages()
 
@@ -298,6 +325,11 @@ class LinTpEngine:
         ]
         self._lib.lintp_tx_uds_msg.restype = c_int32
 
+        self._has_set_nad = hasattr(self._lib, "lintp_set_nad")
+        if self._has_set_nad:
+            self._lib.lintp_set_nad.argtypes = [c_void_p, c_uint8, c_uint8]
+            self._lib.lintp_set_nad.restype = c_int32
+
         self._lib.lintp_tick.argtypes = [c_void_p, c_uint64]
         self._lib.lintp_tick.restype = c_int32
 
@@ -439,6 +471,8 @@ class LinTpEngineWorker:
         self,
         payload: bytes,
         functional: bool = False,
+        req_nad_override: Optional[int] = None,
+        func_nad_override: Optional[int] = None,
         response_timeout_ms: Optional[int] = None,
         pending_gap_ms: int = 3000,
         poll_interval_ms: int = 1,
@@ -448,7 +482,14 @@ class LinTpEngineWorker:
         if response_timeout_ms is not None and flush_before_send:
             self.clear_pending_uds_messages()
 
-        self._tx_req_q.put(_LinTxRequest(payload=bytes(payload), functional=functional))
+        self._tx_req_q.put(
+            _LinTxRequest(
+                payload=bytes(payload),
+                functional=functional,
+                req_nad=req_nad_override,
+                func_nad=func_nad_override,
+            )
+        )
         if response_timeout_ms is None:
             return None
         matcher = response_matcher or build_uds_default_matcher(payload)
@@ -558,6 +599,7 @@ class LinTpEngineWorker:
                         except queue.Empty:
                             break
                         try:
+                            tp.set_nad(req_nad=req.req_nad, func_nad=req.func_nad)
                             tp.tx_uds_msg(req.payload, functional=req.functional, ts_ms=loop_started)
                         except IsoTpError as e:
                             self._err_q.put(e.code)

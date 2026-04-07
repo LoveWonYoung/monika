@@ -571,6 +571,22 @@ pub unsafe extern "C" fn lintp_on_lin_frame(
 #[unsafe(no_mangle)]
 /// # Safety
 /// `engine` must be a valid pointer returned by `lintp_engine_new`.
+pub unsafe extern "C" fn lintp_set_nad(
+    engine: *mut LinTpEngine,
+    req_nad: u8,
+    func_nad: u8,
+) -> i32 {
+    let engine = match lintp_engine_mut(engine) {
+        Ok(engine) => engine,
+        Err(code) => return code,
+    };
+    engine.set_nad(req_nad, func_nad);
+    ISOTP_FFI_OK
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `engine` must be a valid pointer returned by `lintp_engine_new`.
 /// `payload_ptr` must point to `payload_len` readable bytes when `payload_len > 0`.
 pub unsafe extern "C" fn lintp_tx_uds_msg(
     engine: *mut LinTpEngine,

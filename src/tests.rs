@@ -558,6 +558,27 @@ fn test_lin_functional_single_frame_uses_broadcast_nad() {
 }
 
 #[test]
+fn test_lin_set_nad_updates_tx_nad() {
+    let mut engine = LinTpEngine::init(
+        LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+        LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+        0x10,
+        LIN_BROADCAST_NAD,
+        LinTpConfig::default(),
+    )
+    .unwrap();
+
+    engine.set_nad(0x22, 0x7E);
+    engine.tx_uds_msg(&[0x22, 0xF1, 0x91], false, 0).unwrap();
+    let tx = engine.pop_tx_lin_frame().unwrap();
+    assert_eq!(tx.data[0], 0x22);
+
+    engine.tx_uds_msg(&[0x3E, 0x00], true, 0).unwrap();
+    let tx = engine.pop_tx_lin_frame().unwrap();
+    assert_eq!(tx.data[0], 0x7E);
+}
+
+#[test]
 fn test_lin_multi_frame_tx_segmentation() {
     let mut engine = LinTpEngine::init(
         LIN_MASTER_DIAGNOSTIC_FRAME_ID,
@@ -733,6 +754,49 @@ fn test_lintp_ffi_create_tx_and_free() {
         &out_buf[..out_len],
         &[0x10, 0x03, 0x22, 0xF1, 0x90, 0x00, 0x00, 0x00]
     );
+
+    unsafe { lintp_engine_free(engine_ptr) };
+}
+
+#[test]
+fn test_lintp_ffi_set_nad_then_tx() {
+    let mut engine_ptr: *mut LinTpEngine = std::ptr::null_mut();
+    let cfg = lintp_default_config();
+    let rc = unsafe {
+        lintp_engine_new(
+            LIN_MASTER_DIAGNOSTIC_FRAME_ID,
+            LIN_SLAVE_DIAGNOSTIC_FRAME_ID,
+            0x10,
+            LIN_BROADCAST_NAD,
+            cfg,
+            &mut engine_ptr,
+        )
+    };
+    assert_eq!(rc, ISOTP_FFI_OK);
+    assert!(!engine_ptr.is_null());
+
+    let rc = unsafe { lintp_set_nad(engine_ptr, 0x22, 0x7F) };
+    assert_eq!(rc, ISOTP_FFI_OK);
+
+    let payload = [0x22u8, 0xF1, 0x91];
+    let rc = unsafe { lintp_tx_uds_msg(engine_ptr, payload.as_ptr(), payload.len(), 0, 0) };
+    assert_eq!(rc, ISOTP_FFI_OK);
+
+    let mut out_id = 0u8;
+    let mut out_len = 0usize;
+    let mut out_buf = [0u8; 8];
+    let rc = unsafe {
+        lintp_pop_tx_lin_frame(
+            engine_ptr,
+            &mut out_id,
+            out_buf.as_mut_ptr(),
+            out_buf.len(),
+            &mut out_len,
+        )
+    };
+    assert_eq!(rc, ISOTP_FFI_HAS_ITEM);
+    assert_eq!(out_id, LIN_MASTER_DIAGNOSTIC_FRAME_ID);
+    assert_eq!(&out_buf[..out_len], &[0x22, 0x03, 0x22, 0xF1, 0x91, 0x00, 0x00, 0x00]);
 
     unsafe { lintp_engine_free(engine_ptr) };
 }

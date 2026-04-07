@@ -205,7 +205,12 @@ class TpWorker:
             if not has_work and self._bridge_sleep_s > 0:
                 time.sleep(self._bridge_sleep_s)
 
-    def uds_request(self, payload: bytes, functional: bool = False, timeout_ms: int = 10000) -> bytes:
+    def uds_request(
+        self,
+        payload: bytes,
+        functional: bool = False,
+        timeout_ms: int = 10000,
+    ) -> bytes:
         return self._worker.tx_uds_msg(
             payload=payload,
             functional=functional,
@@ -278,7 +283,11 @@ class LinTpWorker:
         cfg: Optional[LinTpConfig] = None,
         tick_period_ms: int = 1,
         bridge_sleep_ms: int = 1,
+        resp_poll_interval_ms: int = 1,
     ):
+        if resp_poll_interval_ms <= 0:
+            raise ValueError("resp_poll_interval_ms must be > 0")
+
         self._hw = hw
         self._req_frame_id = req_frame_id
         self._resp_frame_id = resp_frame_id
@@ -291,6 +300,7 @@ class LinTpWorker:
             tick_period_ms=tick_period_ms,
         )
         self._bridge_sleep_s = max(0.0, bridge_sleep_ms / 1000.0)
+        self._resp_poll_interval_s = resp_poll_interval_ms / 1000.0
         self._stop_evt = threading.Event()
         self._bridge_thread: Optional[threading.Thread] = None
         self._keep_alive_stop_evt = threading.Event()
@@ -323,14 +333,22 @@ class LinTpWorker:
         self.stop()
 
     def _bridge_loop(self) -> None:
+        next_resp_poll_s = time.monotonic()
         while not self._stop_evt.is_set():
             has_work = False
+            now_s = time.monotonic()
 
-            try:
-                # Master mode: actively request slave response from diagnostic response frame.
-                self._hw.request_slave_response(self._resp_frame_id)
-            except Exception:
-                logger.exception("LIN request_slave_response failed")
+            if now_s >= next_resp_poll_s:
+                try:
+                    # Master mode: periodically request slave response from diagnostic response frame.
+                    rx = self._hw.request_slave_response(self._resp_frame_id)
+                    if rx is not None:
+                        has_work = True
+                except Exception:
+                    logger.exception("LIN request_slave_response failed")
+
+                while next_resp_poll_s <= now_s:
+                    next_resp_poll_s += self._resp_poll_interval_s
 
             while True:
                 msg = self._hw.rxfn()
@@ -348,12 +366,24 @@ class LinTpWorker:
                 self._hw.txfn(frame_id, data)
 
             if not has_work and self._bridge_sleep_s > 0:
-                time.sleep(self._bridge_sleep_s)
+                now_s = time.monotonic()
+                sleep_s = min(self._bridge_sleep_s, max(0.0, next_resp_poll_s - now_s))
+                if sleep_s > 0:
+                    time.sleep(sleep_s)
 
-    def uds_request(self, payload: bytes, functional: bool = False, timeout_ms: int = 10000) -> bytes:
+    def uds_request(
+        self,
+        payload: bytes,
+        functional: bool = False,
+        timeout_ms: int = 10000,
+        req_nad: Optional[int] = None,
+        func_nad: Optional[int] = None,
+    ) -> bytes:
         return self._worker.tx_uds_msg(
             payload=payload,
             functional=functional,
+            req_nad_override=req_nad,
+            func_nad_override=func_nad,
             response_timeout_ms=timeout_ms,
             pending_gap_ms=3000,
             poll_interval_ms=1,

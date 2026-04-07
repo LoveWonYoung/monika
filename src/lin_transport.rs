@@ -145,6 +145,11 @@ impl LinTpEngine {
         Ok(())
     }
 
+    pub fn set_nad(&mut self, req_nad: u8, func_nad: u8) {
+        self.req_nad = req_nad;
+        self.func_nad = func_nad;
+    }
+
     pub fn on_lin_frame(&mut self, id: u8, data: &[u8], ts_ms: u64) -> Result<(), TpError> {
         if id != self.resp_frame_id {
             return Ok(());

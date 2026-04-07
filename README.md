@@ -39,6 +39,7 @@ Python 绑定（`python/lib/isotp_engine_ctypes.py`）：
 
 另外已提供 LIN TP 绑定（`python/lib/lintp_engine_ctypes.py`）：
 - `LinTpEngine(req_frame_id, resp_frame_id, req_nad, func_nad, cfg)`
+- `set_nad(req_nad, func_nad=None)`：运行时切换目标 NAD
 - `on_lin_frame(frame_id, data, ts_ms=...)`
 - `tx_uds_msg(payload, functional=False, ts_ms=...)`
 - `tick(ts_ms=...)`
@@ -187,8 +188,16 @@ from devices.toomoss import ToomossLin
 from devices.tp_clients import LinTpWorker
 
 with ToomossLin(channel=0, baudrate=19200, master=True) as hw:
-    with LinTpWorker(hw=hw, req_frame_id=0x3C, resp_frame_id=0x3D, req_nad=0x10, func_nad=0x7F) as dev:
-        req = bytes([0x22, 0xF1, 0x90])
-        rsp = dev.uds_request(req, timeout_ms=3000)
-        print("LIN UDS:", rsp.hex(" "))
+    with LinTpWorker(
+        hw=hw,
+        req_frame_id=0x3C,
+        resp_frame_id=0x3D,
+        req_nad=0x10,
+        func_nad=0x7F,
+        resp_poll_interval_ms=15,  # 3D header poll period, typical values: 10/15/20
+    ) as dev:
+        rsp1 = dev.uds_request(bytes([0x22, 0xF1, 0x90]), timeout_ms=3000, req_nad=0x10)
+        rsp2 = dev.uds_request(bytes([0x22, 0xF1, 0x91]), timeout_ms=3000, req_nad=0x22)
+        print("LIN UDS #1:", rsp1.hex(" "))
+        print("LIN UDS #2:", rsp2.hex(" "))
 ```

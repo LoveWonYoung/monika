@@ -192,6 +192,12 @@ int32_t lintp_on_lin_frame(
     uint64_t ts_ms
 );
 
+int32_t lintp_set_nad(
+    LinTpEngine* engine,
+    uint8_t req_nad,
+    uint8_t func_nad
+);
+
 int32_t lintp_tx_uds_msg(
     LinTpEngine* engine,
     const uint8_t* payload_ptr,
