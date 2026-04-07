@@ -1,6 +1,7 @@
 from .fakes import FakeEcu
-from .toomoss import Toomoss
-from .tp_clients import MyHwDeviceWithTpEngine, TpWorker
+from .toomoss.toomoss_canfd import Toomoss
+from .toomoss.toomoss_usb2lin import ToomossLin
+from .tp_clients import LinTpWorker, MyHwDeviceWithTpEngine, TpWorker
 
 
 def demo() -> None:
@@ -23,6 +24,15 @@ def demo_worker() -> None:
             print("worker response:", rsp.hex(" "))
 
 
+def demo_lin_worker() -> None:
+    with ToomossLin(channel=0, baudrate=19200, master=True) as hw:
+        with LinTpWorker(hw=hw, req_frame_id=0x3C, resp_frame_id=0x3D, req_nad=0x10, func_nad=0x7F) as dev:
+            req = bytes([0x22, 0xF1, 0x90])
+            rsp = dev.uds_request(req)
+            print("lin worker request:", req.hex(" "))
+            print("lin worker response:", rsp.hex(" "))
+
+
 # Backward compatibility aliases.
 _FakeEcu = FakeEcu
 
@@ -31,10 +41,13 @@ __all__ = [
     "Toomoss",
     "MyHwDeviceWithTpEngine",
     "TpWorker",
+    "ToomossLin",
+    "LinTpWorker",
     "FakeEcu",
     "_FakeEcu",
     "demo",
     "demo_worker",
+    "demo_lin_worker",
 ]
 
 

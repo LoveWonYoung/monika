@@ -6,8 +6,8 @@ from typing import Deque, Optional
 
 from core.types import RawCanMsg
 
-from .exceptions import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
-from .interface import MyHwDeviceInterface
+from ..exceptions import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
+from ..interface import MyHwDeviceInterface
 from .toomoss_usb2canfd import (
     CANFD_GetCANSpeedArg,
     CANFD_GetMsg,
@@ -222,3 +222,7 @@ class Toomoss(MyHwDeviceInterface):
         if self._buf:
             return self._buf.popleft()
         return None
+
+
+# Backward compatibility export.
+from .toomoss_usb2lin import ToomossLin  # noqa: E402

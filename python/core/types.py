@@ -6,3 +6,9 @@ class RawCanMsg:
     id: int
     data: bytes
     isfd: bool
+
+
+@dataclass(frozen=True)
+class RawLinMsg:
+    id: int
+    data: bytes

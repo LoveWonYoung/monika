@@ -9,7 +9,7 @@ if str(PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(PYTHON_DIR))
 
 from lib.isotp_engine_ctypes import IsoTpError
-from lintp_engine_ctypes import LinMsg, LinTpConfig, LinTpEngine, send_uds_and_wait_final_lin
+from lib.lintp_engine_ctypes import LinMsg, LinTpConfig, LinTpEngine, LinTpEngineWorker, send_uds_and_wait_final_lin
 
 REQ_FRAME_ID = 0x3C
 RESP_FRAME_ID = 0x3D
@@ -137,6 +137,27 @@ class LinPackUnpackTests(unittest.TestCase):
             self.assertEqual(rsp, bytes([0x62, 0xF1, 0x90]))
             self.assertTrue(len(sent) >= 1)
             self.assertEqual(sent[0][0], REQ_FRAME_ID)
+
+    def test_lin_worker_tx_timeout_mode_ignores_stale_queue_message(self):
+        with LinTpEngineWorker(
+            req_frame_id=REQ_FRAME_ID,
+            resp_frame_id=RESP_FRAME_ID,
+            req_nad=REQ_NAD,
+            func_nad=FUNC_NAD,
+            cfg=_cfg_fast(),
+            tick_period_ms=1,
+        ) as tp:
+            # stale response from previous request (different DID)
+            tp.on_lin_frame(RESP_FRAME_ID, bytes([REQ_NAD, 0x03, 0x62, 0x12, 0x34, 0x00, 0x00, 0x00]))
+            # current request response
+            tp.on_lin_frame(RESP_FRAME_ID, bytes([REQ_NAD, 0x03, 0x62, 0xF1, 0x90, 0x00, 0x00, 0x00]))
+
+            rsp = tp.tx_uds_msg(
+                bytes([0x22, 0xF1, 0x90]),
+                response_timeout_ms=1000,
+                pending_gap_ms=300,
+            )
+            self.assertEqual(rsp, bytes([0x62, 0xF1, 0x90]))
 
 
 if __name__ == "__main__":

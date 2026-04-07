@@ -89,3 +89,34 @@ Your `rxfunc()` should be non-blocking and return `None` when no frame is availa
 - `pop_tx_lin_frame()`
 - `rx_uds_msg()`
 - `pop_error()`
+
+`LinTpEngineWorker`（后台线程独占引擎，接口风格与 `IsoTpEngineWorker` 一致）：
+- `on_lin_frame(frame_id, data)`
+- `tx_uds_msg(payload, functional=False, response_timeout_ms=...)`
+- `pop_tx_lin_frame(timeout_s=...)`
+- `pop_rx_uds_msg(timeout_s=...)`
+- `wait_uds_final_response(...)`
+- `pop_error(timeout_s=...)`
+
+## Toomoss LIN (Master) bridge
+
+`ToomossLin` 位于 `devices/toomoss/toomoss_usb2lin.py`，参考 `toomoss.go` 的调用方式，封装了：
+- `write_message(frame_id, data)`（对应 `MW`）
+- `request_slave_response(frame_id)`（对应 `MR`）
+- `lin_break()`（对应 `BK`）
+
+可直接配合 `devices.tp_clients.LinTpWorker`：
+
+```python
+from devices.toomoss import ToomossLin
+from devices.tp_clients import LinTpWorker
+
+with ToomossLin(channel=0, baudrate=19200, master=True) as hw:
+    with LinTpWorker(hw=hw, req_frame_id=0x3C, resp_frame_id=0x3D, req_nad=0x10, func_nad=0x7F) as dev:
+        rsp = dev.uds_request(bytes([0x22, 0xF1, 0x90]))
+        print(rsp.hex(" "))
+```
+
+推荐导入：
+- `from devices.toomoss import ToomossLin`
+- `from devices import ToomossLin`

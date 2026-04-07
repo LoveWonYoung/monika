@@ -2,7 +2,7 @@ import logging
 
 from log_recorder import init_and_rotate
 from devices.exceptions import DeviceError
-from devices.toomoss import Toomoss
+from devices.toomoss.toomoss_canfd import Toomoss
 from devices.tp_clients import TpWorker
 
 if __name__ == '__main__':

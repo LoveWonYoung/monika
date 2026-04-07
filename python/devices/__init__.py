@@ -1,6 +1,13 @@
 from .exceptions import DeviceError, DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
-from .toomoss import Toomoss
-from .tp_clients import MyHwDeviceWithTpEngine, TpWorker
+
+try:
+    from .toomoss import Toomoss, ToomossLin
+except Exception:
+    # 允许在无 USB2XXX 动态库环境下导入 devices 包（例如纯单元测试环境）。
+    Toomoss = None
+    ToomossLin = None
+
+from .tp_clients import LinTpWorker, MyHwDeviceWithTpEngine, TpWorker
 
 __all__ = [
 	"DeviceError",
@@ -9,6 +16,8 @@ __all__ = [
 	"DeviceInitError",
 	"DeviceSendError",
 	"Toomoss",
+	"ToomossLin",
 	"MyHwDeviceWithTpEngine",
 	"TpWorker",
+	"LinTpWorker",
 ]

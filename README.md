@@ -21,11 +21,11 @@ cargo build --release
 - Linux: `target/release/libisotp_engine.so`
 - Windows: `target/release/isotp_engine.dll`
 
-`python/isotp_engine_ctypes.py` 默认从 `../target/release/` 载入对应动态库。
+`python/lib/isotp_engine_ctypes.py` 默认从 `../target/release/` 载入对应动态库。
 
 ## 3. 需要调用的接口
 
-Python 绑定（`python/isotp_engine_ctypes.py`）：
+Python 绑定（`python/lib/isotp_engine_ctypes.py`）：
 
 - `IsoTpEngine(req_id, resp_id, func_id, is_fd, cfg)`
 - `tx_uds_msg(payload, functional=False, ts_ms=...)`
@@ -37,7 +37,7 @@ Python 绑定（`python/isotp_engine_ctypes.py`）：
 - `rx_uds_msg()`
 - `pop_error()`
 
-另外已提供 LIN TP 绑定（`python/lintp_engine_ctypes.py`）：
+另外已提供 LIN TP 绑定（`python/lib/lintp_engine_ctypes.py`）：
 - `LinTpEngine(req_frame_id, resp_frame_id, req_nad, func_nad, cfg)`
 - `on_lin_frame(frame_id, data, ts_ms=...)`
 - `tx_uds_msg(payload, functional=False, ts_ms=...)`
@@ -166,4 +166,29 @@ def run(bus):
 
 ## 9. 如需后台线程
 
-可使用 `IsoTpEngineWorker`（`python/isotp_engine_ctypes.py`）让一个线程独占引擎。其他线程通过队列通信，不要直接并发调引擎方法。
+可使用 `IsoTpEngineWorker`（`python/lib/isotp_engine_ctypes.py`）让一个线程独占引擎。其他线程通过队列通信，不要直接并发调引擎方法。
+
+## 10. Toomoss LIN 实机接入（Master）
+
+已提供基于 Toomoss 官方 `usb2lin_ex.py` 的设备封装：
+- `python/devices/toomoss/toomoss_usb2lin.py`：`ToomossLin`
+- `python/devices/tp_clients.py`：`LinTpWorker`
+
+`ToomossLin` 关键接口：
+- `write_message(frame_id, data)`：主机写帧（MW）
+- `request_slave_response(frame_id)`：主机读帧（MR）
+- `lin_break()`：发送 LIN break（BK）
+- `txfn()/rxfn()`：给 `LinTpWorker` 做桥接
+
+最小示例：
+
+```python
+from devices.toomoss import ToomossLin
+from devices.tp_clients import LinTpWorker
+
+with ToomossLin(channel=0, baudrate=19200, master=True) as hw:
+    with LinTpWorker(hw=hw, req_frame_id=0x3C, resp_frame_id=0x3D, req_nad=0x10, func_nad=0x7F) as dev:
+        req = bytes([0x22, 0xF1, 0x90])
+        rsp = dev.uds_request(req, timeout_ms=3000)
+        print("LIN UDS:", rsp.hex(" "))
+```

@@ -10,7 +10,7 @@ from ctypes import *
 
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
-_PROJECT_DIR = os.path.abspath(os.path.join(_THIS_DIR, ".."))
+_PROJECT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 
 
 # 设备固件信息定义

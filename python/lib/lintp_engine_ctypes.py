@@ -1,5 +1,8 @@
 import ctypes
+import queue
+import threading
 import time
+import traceback
 from ctypes import POINTER, Structure, byref, c_int32, c_size_t, c_uint32, c_uint64, c_uint8, c_void_p
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
@@ -20,6 +23,12 @@ from lib.isotp_engine_ctypes import (
 class LinMsg:
     id: int
     data: bytes
+
+
+@dataclass
+class _LinTxRequest:
+    payload: bytes
+    functional: bool
 
 
 class _LinTpConfigC(Structure):
@@ -370,3 +379,223 @@ def send_uds_and_wait_final_lin(
     if resp is None:
         raise TimeoutError("response_timeout_ms was not set")
     return resp
+
+
+class LinTpEngineWorker:
+    """
+    Single-owner worker thread for LinTpEngine.
+    All Rust calls happen in this thread to avoid concurrent mutable access.
+    """
+
+    def __init__(
+        self,
+        req_frame_id: int = 0x3C,
+        resp_frame_id: int = 0x3D,
+        req_nad: int = 0x01,
+        func_nad: int = 0x7F,
+        cfg: Optional[LinTpConfig] = None,
+        lib_path: Optional[str] = None,
+        tick_period_ms: int = 1,
+    ):
+        self._req_frame_id = req_frame_id
+        self._resp_frame_id = resp_frame_id
+        self._req_nad = req_nad
+        self._func_nad = func_nad
+        self._cfg = cfg
+        self._lib_path = lib_path
+        self._tick_period_ms = max(1, tick_period_ms)
+
+        self._tx_req_q: "queue.Queue[_LinTxRequest]" = queue.Queue()
+        self._rx_lin_q: "queue.Queue[LinMsg]" = queue.Queue()
+        self._tx_lin_q: "queue.Queue[Tuple[int, bytes]]" = queue.Queue()
+        self._rx_uds_q: "queue.Queue[bytes]" = queue.Queue()
+        self._err_q: "queue.Queue[int]" = queue.Queue()
+        self._worker_exception_text: Optional[str] = None
+
+        self._stop_evt = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_evt.clear()
+        self._thread = threading.Thread(target=self._run, name="LinTpEngineWorker", daemon=True)
+        self._thread.start()
+
+    def stop(self, timeout_s: float = 2.0) -> None:
+        self._stop_evt.set()
+        if self._thread is not None:
+            self._thread.join(timeout=timeout_s)
+            self._thread = None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+
+    def tx_uds_msg(
+        self,
+        payload: bytes,
+        functional: bool = False,
+        response_timeout_ms: Optional[int] = None,
+        pending_gap_ms: int = 3000,
+        poll_interval_ms: int = 1,
+        response_matcher: Optional[Callable[[bytes], bool]] = None,
+        flush_before_send: bool = True,
+    ) -> Optional[bytes]:
+        if response_timeout_ms is not None and flush_before_send:
+            self.clear_pending_uds_messages()
+
+        self._tx_req_q.put(_LinTxRequest(payload=bytes(payload), functional=functional))
+        if response_timeout_ms is None:
+            return None
+        matcher = response_matcher or build_uds_default_matcher(payload)
+        return self.wait_uds_final_response(
+            overall_timeout_ms=response_timeout_ms,
+            pending_gap_ms=pending_gap_ms,
+            poll_interval_ms=poll_interval_ms,
+            response_matcher=matcher,
+        )
+
+    def on_lin_frame(self, frame_id: int, data: bytes) -> None:
+        self._rx_lin_q.put(LinMsg(id=frame_id, data=bytes(data)))
+
+    def pop_tx_lin_frame(self, timeout_s: float = 0.0) -> Optional[Tuple[int, bytes]]:
+        try:
+            return self._tx_lin_q.get(timeout=timeout_s)
+        except queue.Empty:
+            return None
+
+    def pop_rx_uds_msg(self, timeout_s: float = 0.0) -> Optional[bytes]:
+        try:
+            return self._rx_uds_q.get(timeout=timeout_s)
+        except queue.Empty:
+            return None
+
+    def pop_error(self, timeout_s: float = 0.0) -> Optional[int]:
+        try:
+            return self._err_q.get(timeout=timeout_s)
+        except queue.Empty:
+            return None
+
+    def clear_pending_uds_messages(self) -> int:
+        count = 0
+        while True:
+            try:
+                self._rx_uds_q.get_nowait()
+            except queue.Empty:
+                break
+            count += 1
+        return count
+
+    def wait_uds_final_response(
+        self,
+        overall_timeout_ms: int = 10000,
+        pending_gap_ms: int = 5000,
+        poll_interval_ms: int = 1,
+        response_matcher: Optional[Callable[[bytes], bool]] = None,
+    ) -> bytes:
+        if overall_timeout_ms <= 0:
+            raise ValueError("overall_timeout_ms must be > 0")
+        if pending_gap_ms <= 0:
+            raise ValueError("pending_gap_ms must be > 0")
+        if poll_interval_ms < 0:
+            raise ValueError("poll_interval_ms must be >= 0")
+
+        end_at = monotonic_ms() + overall_timeout_ms
+        pending_deadline = end_at
+        seen_pending = False
+
+        while monotonic_ms() <= end_at:
+            err = self.pop_error(timeout_s=0.0)
+            if err is not None:
+                if err == -9999 and self._worker_exception_text:
+                    raise RuntimeError(self._worker_exception_text)
+                raise IsoTpError(err)
+
+            timeout_s = poll_interval_ms / 1000.0 if poll_interval_ms > 0 else 0.0
+            msg = self.pop_rx_uds_msg(timeout_s=timeout_s)
+            if msg is None:
+                if seen_pending and monotonic_ms() > pending_deadline:
+                    raise TimeoutError("UDS pending gap timeout after NRC 0x78")
+                continue
+
+            if response_matcher is not None and not response_matcher(msg):
+                continue
+
+            parsed = parse_uds_negative_response(msg)
+            if parsed is None:
+                return msg
+
+            service_id, nrc = parsed
+            if nrc == 0x78:
+                seen_pending = True
+                pending_deadline = monotonic_ms() + pending_gap_ms
+                continue
+
+            raise UdsNegativeResponseError(service_id=service_id, nrc=nrc, payload=msg)
+
+        raise TimeoutError("UDS final response timeout")
+
+    def _run(self) -> None:
+        try:
+            with LinTpEngine(
+                req_frame_id=self._req_frame_id,
+                resp_frame_id=self._resp_frame_id,
+                req_nad=self._req_nad,
+                func_nad=self._func_nad,
+                cfg=self._cfg,
+                lib_path=self._lib_path,
+            ) as tp:
+                while not self._stop_evt.is_set():
+                    loop_started = monotonic_ms()
+
+                    while True:
+                        try:
+                            req = self._tx_req_q.get_nowait()
+                        except queue.Empty:
+                            break
+                        try:
+                            tp.tx_uds_msg(req.payload, functional=req.functional, ts_ms=loop_started)
+                        except IsoTpError as e:
+                            self._err_q.put(e.code)
+
+                    while True:
+                        try:
+                            frame = self._rx_lin_q.get_nowait()
+                        except queue.Empty:
+                            break
+                        try:
+                            tp.on_lin_frame(frame_id=frame.id, data=frame.data, ts_ms=loop_started)
+                        except IsoTpError as e:
+                            self._err_q.put(e.code)
+
+                    try:
+                        tp.tick(loop_started)
+                    except IsoTpError as e:
+                        self._err_q.put(e.code)
+
+                    for item in tp.pop_all_tx_lin_frames():
+                        self._tx_lin_q.put(item)
+
+                    while True:
+                        item = tp.rx_uds_msg()
+                        if item is None:
+                            break
+                        self._rx_uds_q.put(item)
+
+                    while True:
+                        item = tp.pop_error()
+                        if item is None:
+                            break
+                        self._err_q.put(item)
+
+                    elapsed = monotonic_ms() - loop_started
+                    sleep_ms = self._tick_period_ms - elapsed
+                    if sleep_ms > 0:
+                        time.sleep(sleep_ms / 1000.0)
+        except Exception:
+            self._worker_exception_text = traceback.format_exc().strip()
+            self._err_q.put(-9999)
