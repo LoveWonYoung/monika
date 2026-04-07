@@ -2,7 +2,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Optional
 
-from ..core.types import RawCanMsg
+from ..common.types import RawCanMsg
 
 
 @dataclass

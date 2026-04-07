@@ -1,10 +1,9 @@
-import logging
-
+from .worker import CanTpWorker
+from .backends.toomoss import Toomoss
 from ..hw.errors import DeviceError
 from ..utils.log_recorder import init_and_rotate
 
-from . import Toomoss
-from .worker import CanTpWorker
+import logging
 
 
 def main() -> None:

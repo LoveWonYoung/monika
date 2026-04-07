@@ -3,7 +3,7 @@ from collections import deque
 from ctypes import byref, c_uint
 from typing import Deque, Optional
 
-from ...core.types import RawLinMsg
+from ...common.types import RawLinMsg
 
 from ...hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
 from ...hw.toomoss_usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice

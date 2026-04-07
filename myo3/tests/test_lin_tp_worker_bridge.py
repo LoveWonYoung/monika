@@ -3,7 +3,7 @@ from collections import deque
 from typing import Optional
 
 
-from isotp_engine.core.types import RawLinMsg
+from isotp_engine.common.types import RawLinMsg
 from isotp_engine.lin_device.worker import LinTpWorker
 
 

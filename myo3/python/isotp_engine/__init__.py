@@ -17,8 +17,6 @@ from .bindings import (
     parse_uds_negative_response,
     send_uds_and_wait_final,
     send_uds_and_wait_final_lin,
-    step_once,
-    step_once_lin,
 )
 
 __all__ = [
@@ -38,6 +36,4 @@ __all__ = [
     "parse_uds_negative_response",
     "send_uds_and_wait_final",
     "send_uds_and_wait_final_lin",
-    "step_once",
-    "step_once_lin",
 ]

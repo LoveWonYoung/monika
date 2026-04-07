@@ -4,7 +4,7 @@ from collections import deque
 from ctypes import byref, c_uint
 from typing import Deque, Optional
 
-from ...core.types import RawCanMsg
+from ...common.types import RawCanMsg
 
 from ...hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
 from ..interface import CanDeviceInterface

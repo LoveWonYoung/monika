@@ -1,10 +1,9 @@
-import logging
-
+from .worker import LinTpWorker
+from .backends.toomoss import ToomossLin
 from ..hw.errors import DeviceError
 from ..utils.log_recorder import init_and_rotate
 
-from . import ToomossLin
-from .worker import LinTpWorker
+import logging
 
 
 def main() -> None:

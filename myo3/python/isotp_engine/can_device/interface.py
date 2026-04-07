@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from ..core.types import RawCanMsg
+from ..common.types import RawCanMsg
 
 
 class CanDeviceInterface(ABC):

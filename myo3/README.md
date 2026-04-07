@@ -17,7 +17,7 @@ Installed package layout:
 - `isotp_engine.can_device` — CAN device adapters and workers
 - `isotp_engine.lin_device` — LIN device adapters and workers
 - `isotp_engine.hw` — hardware-facing helpers
-- `isotp_engine.core` — shared data types
+- `isotp_engine.common` — shared data types
 - `isotp_engine.utils` — utility helpers
 
 ## Development
@@ -67,6 +67,8 @@ Or invoke submodules directly:
 ```bash
 python -m isotp_engine.can_device.main
 python -m isotp_engine.lin_device.main
+python examples/can_demo.py
+python examples/lin_demo.py
 ```
 
 ## Import examples
@@ -76,6 +78,7 @@ from isotp_engine.bindings import IsoTpEngine, LinTpEngine, TpConfig, LinTpConfi
 from isotp_engine.can_device.worker import CanTpWorker
 from isotp_engine.can_device.fake import FakeEcu
 from isotp_engine.lin_device.worker import LinTpWorker
+from isotp_engine.common.types import RawCanMsg, RawLinMsg
 ```
 
 ## Notes
