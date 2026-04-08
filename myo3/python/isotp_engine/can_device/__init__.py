@@ -7,6 +7,11 @@ try:
 except (ImportError, OSError, RuntimeError):
     Toomoss = None
 
+try:
+    from .udsoncan_connection import UdsoncanIsoTpConnection
+except Exception:
+    UdsoncanIsoTpConnection = None
+
 __all__ = [
     "CanDeviceInterface",
     "MyHwDeviceInterface",
@@ -16,4 +21,5 @@ __all__ = [
     "TpWorker",
     "Toomoss",
     "FakeEcu",
+    "UdsoncanIsoTpConnection",
 ]
