@@ -97,8 +97,6 @@ def parse_uds_negative_response(payload: bytes) -> tuple[int, int, int]:
 def build_uds_default_matcher(request: bytes) -> Callable[[bytes], bool]:
     req = bytes(request)
     sid = req[0] if req else None
-    subfn = req[1] if len(req) >= 2 else None
-    params = req[1:3]
 
     def matcher(response: bytes) -> bool:
         rsp = bytes(response)
@@ -112,10 +110,19 @@ def build_uds_default_matcher(request: bytes) -> Callable[[bytes], bool]:
             return len(rsp) >= 2 and rsp[1] == sid
         if rsp[0] != ((sid + 0x40) & 0xFF):
             return False
-        if len(params) >= 2 and len(rsp) >= 3:
-            return rsp[1:3] == params
-        if subfn is not None and len(rsp) >= 2:
-            return rsp[1] == subfn
+
+        # DID-echo style services.
+        if sid in (0x22, 0x2E, 0x2F) and len(req) >= 3 and len(rsp) >= 3:
+            return rsp[1:3] == req[1:3]
+
+        # RoutineControl echoes sub-function + routine id.
+        if sid == 0x31 and len(req) >= 4 and len(rsp) >= 4:
+            return rsp[1:4] == req[1:4]
+
+        # Sub-function echo services (e.g. 0x19 ReadDTCInformation).
+        if sid in (0x10, 0x11, 0x19, 0x27, 0x28, 0x3E, 0x85, 0x87) and len(req) >= 2 and len(rsp) >= 2:
+            return (rsp[1] & 0x7F) == (req[1] & 0x7F)
+
         return True
 
     return matcher

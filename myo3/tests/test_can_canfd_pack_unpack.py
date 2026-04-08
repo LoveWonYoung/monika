@@ -172,6 +172,26 @@ class CanCanFdPackUnpackTests(unittest.TestCase):
         self.assertTrue(matcher(bytes([0x62, 0xF1, 0x90])))
         self.assertTrue(matcher(bytes([0x7F, 0x22, 0x78])))
 
+    def test_default_response_matcher_for_read_dtc_information(self):
+        matcher = build_uds_default_matcher(bytes([0x19, 0x02, 0x09]))
+        # Positive response echoes sub-function only; 3rd byte is not request status mask echo.
+        self.assertTrue(matcher(bytes([0x59, 0x02, 0x7F, 0xFF])))
+        self.assertFalse(matcher(bytes([0x59, 0x03, 0x7F, 0xFF])))
+
+    def test_worker_request_0x19_can_ignore_stale_subfunction(self):
+        with IsoTpEngineWorker(REQ_ID, RESP_ID, FUNC_ID, is_fd=False, cfg=_cfg_fast(), tick_period_ms=1) as tp:
+            # stale 0x19 response from previous request (different sub-function)
+            tp.on_can_frame(RESP_ID, bytes([0x04, 0x59, 0x03, 0x7F, 0xFF, 0, 0, 0]), is_fd=False)
+            # response for current request 0x19 0x02 0x09
+            tp.on_can_frame(RESP_ID, bytes([0x04, 0x59, 0x02, 0x7F, 0xFF, 0, 0, 0]), is_fd=False)
+
+            rsp = tp.tx_uds_msg(
+                bytes([0x19, 0x02, 0x09]),
+                response_timeout_ms=1000,
+                pending_gap_ms=300,
+            )
+            self.assertEqual(rsp, bytes([0x59, 0x02, 0x7F, 0xFF]))
+
     def test_worker_tx_timeout_mode_ignores_stale_queue_message(self):
         with IsoTpEngineWorker(REQ_ID, RESP_ID, FUNC_ID, is_fd=False, cfg=_cfg_fast(), tick_period_ms=1) as tp:
             # stale response from previous request (different DID)
