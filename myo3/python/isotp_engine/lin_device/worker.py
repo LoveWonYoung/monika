@@ -1,23 +1,13 @@
 import logging
 import threading
 import time
-from typing import Optional, Protocol
+from typing import Optional
 
 from ..bindings.lintp import LinTpConfig, LinTpEngineWorker
+from .interface import LinMasterDeviceInterface
 
 
 logger = logging.getLogger(__name__)
-
-
-class LinMasterDeviceInterface(Protocol):
-    def request_slave_response(self, frame_id: int):
-        ...
-
-    def rxfn(self):
-        ...
-
-    def txfn(self, frame_id: int, data: bytes) -> None:
-        ...
 
 
 class LinTpWorker:

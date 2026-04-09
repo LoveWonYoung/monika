@@ -22,7 +22,7 @@ Installed package layout:
 - `isotp_engine._native` — Rust extension module built by maturin / PyO3
 - `isotp_engine.bindings` — high-level transport API
 - `isotp_engine.can_device` — CAN device workers, interfaces, fake devices, backends
-- `isotp_engine.lin_device` — LIN device workers and backends
+- `isotp_engine.lin_device` — LIN device workers, interfaces, and backends
 - `isotp_engine.hw` — shared hardware-facing helpers
 - `isotp_engine.common` — shared data types
 - `isotp_engine.utils` — utility helpers
@@ -209,6 +209,13 @@ So for a new backend such as PCAN, the important part is:
 - `rxfn()` returns one `RawCanMsg` or `None`
 - `txfn(can_id, data, is_fd)` sends one CAN / CAN-FD frame
 
+You can also probe backend availability at runtime with:
+
+```python
+from isotp_engine.can_device import available_backends
+print(available_backends())
+```
+
 Optional but recommended:
 
 - context manager support: `__enter__` / `__exit__`
@@ -269,6 +276,13 @@ python/isotp_engine/lin_device/backends/
 ```
 
 and implement the same expectations as the current Toomoss LIN backend.
+
+A matching runtime probe also exists for LIN backends:
+
+```python
+from isotp_engine.lin_device import available_backends
+print(available_backends())
+```
 
 ---
 
