@@ -1,169 +1,163 @@
 """
-文件说明:USB2XXX设备操作相关函数集合
-更多帮助:www.toomoss.com
-使用说明:程序正常运行,需要将sdk/libs目录复制到程序目录下
+USB2XXX device API bindings.
 """
 
-import os
 import platform
 from ctypes import *
+from pathlib import Path
+
+from .windows_dll import load_windows_dll
 
 
-_THIS_DIR = os.path.abspath(os.path.dirname(__file__))
-_PROJECT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
-_CWD_DIR = os.path.abspath(os.getcwd())
+_THIS_DIR = Path(__file__).resolve().parent
+_PROJECT_DIR = _THIS_DIR.parent.parent
+_CWD_DIR = Path.cwd()
 
 
-# 设备固件信息定义
 class DEVICE_INFO(Structure):
     _fields_ = [
-        ("FirmwareName", c_char*32),   # firmware name string
-        ("BuildDate", c_char*32),      # firmware build date and time string
-        ("HardwareVersion", c_uint),   # hardware version
-        ("FirmwareVersion",c_uint),    # firmware version
-        ("SerialNumber",c_uint*3),     # USB2XXX serial number
-        ("Functions",c_uint)           # USB2XXX functions
+        ("FirmwareName", c_char * 32),
+        ("BuildDate", c_char * 32),
+        ("HardwareVersion", c_uint),
+        ("FirmwareVersion", c_uint),
+        ("SerialNumber", c_uint * 3),
+        ("Functions", c_uint),
     ]
 
-# 设备固件信息定义
+
 class HARDWARE_INFO(Structure):
     _fields_ = [
-        ("McuModel", c_char*16),    # 主芯片型号
-        ("ProductModel", c_char*16),# 产品型号
-        ("Version", c_uint),        # 硬件版本号
-        ("CANChannelNum",c_char),   # LIN通道数
-        ("PWMChannelNum",c_char),   # PWM通道数，包含LIN和DO可输出的
-        ("HaveCANFD",c_char),       # 是否支持CANFD功能
-        ("DIChannelNum",c_char),    # 独立DI通道数，不包含LIN通道
-        ("DOChannelNum",c_char),    # 独立DO通道数，不包含LIN通道
-        ("HaveIsolation",c_char),   # 是否支持电磁隔离
-        ("ExPowerSupply",c_char),   # 是否支持外部电源供电
-        ("IsOEM",c_char),           # 是客户定制版本吗
-        ("EECapacity",c_char),      # EEPROM支持容量，单位为KByte,0表示没有EEPROM
-        ("SPIFlashCapacity",c_char),# Flash容量，单位为MByte,0表示没有Flash
-        ("TFCardSupport",c_char),   # 是否支持TF卡安装
-        ("ProductionDate", c_char*12),# 生产日期
-        ("USBControl",c_char),      # 支持通过USB控制
-        ("SerialControl",c_char),   # 支持串口控制
-        ("EthControl",c_char),      # 支持网口控制
-        ("VbatChannel",c_char)      # 可以控制的VBAT输出通道数
+        ("McuModel", c_char * 16),
+        ("ProductModel", c_char * 16),
+        ("Version", c_uint),
+        ("CANChannelNum", c_char),
+        ("PWMChannelNum", c_char),
+        ("HaveCANFD", c_char),
+        ("DIChannelNum", c_char),
+        ("DOChannelNum", c_char),
+        ("HaveIsolation", c_char),
+        ("ExPowerSupply", c_char),
+        ("IsOEM", c_char),
+        ("EECapacity", c_char),
+        ("SPIFlashCapacity", c_char),
+        ("TFCardSupport", c_char),
+        ("ProductionDate", c_char * 12),
+        ("USBControl", c_char),
+        ("SerialControl", c_char),
+        ("EthControl", c_char),
+        ("VbatChannel", c_char),
     ]
 
-# 定义电压输出值
-POWER_LEVEL_1V8     = 1 # 输出1.8V
-POWER_LEVEL_2V5     = 2 # 输出2.5V
-POWER_LEVEL_3V3     = 3 # 输出3.3V
+
+POWER_LEVEL_1V8 = 1
+POWER_LEVEL_2V5 = 2
+POWER_LEVEL_3V3 = 3
 
 
-
-def _load_first_existing(loader, candidates):
-    last_exc = None
-    for path in candidates:
-        if not os.path.isfile(path):
-            continue
-        try:
-            return loader(path)
-        except OSError as exc:
-            last_exc = exc
-    if last_exc is not None:
-        raise RuntimeError(f"Failed to load USB2XXX dependency: {last_exc}")
-    raise RuntimeError(f"No USB2XXX library found in candidates: {candidates}")
+def _load_windows_dll_from_bin_only(dll_name: str, search_dirs):
+    for search_dir in search_dirs:
+        candidate = search_dir / dll_name
+        if candidate.is_file():
+            return windll.LoadLibrary(str(candidate))
+    raise RuntimeError(
+        f"Failed to load {dll_name} from bin directories: {[str(search_dir) for search_dir in search_dirs]}"
+    )
 
 
-def _unique_paths(paths):
-    seen = set()
-    unique = []
-    for path in paths:
-        norm = os.path.normcase(os.path.abspath(path))
-        if norm in seen:
-            continue
-        seen.add(norm)
-        unique.append(path)
-    return unique
-
-
-# 根据系统自动导入对应的库文件，尽量使用与文件位置相关的绝对路径。
 if platform.system() == "Windows":
-    if "64bit" in platform.architecture()[0]:
-        dep_candidates = _unique_paths([
-            os.path.join(_CWD_DIR, "bin", "libusb-1.0.dll"),
-            os.path.join(_PROJECT_DIR, "bin", "libusb-1.0.dll"),
-        ])
-        lib_candidates = _unique_paths([
-            os.path.join(_CWD_DIR, "bin", "USB2XXX.dll"),
-            os.path.join(_PROJECT_DIR, "bin", "USB2XXX.dll"),
-        ])
-    else:
-        dep_candidates = _unique_paths([
-            os.path.join(_CWD_DIR, "bin", "libusb-1.0.dll"),
-            os.path.join(_PROJECT_DIR, "libs", "windows", "x86_32", "libusb-1.0.dll"),
-        ])
-        lib_candidates = _unique_paths([
-            os.path.join(_CWD_DIR, "bin", "USB2XXX.dll"),
-            os.path.join(_PROJECT_DIR, "libs", "windows", "x86_32", "USB2XXX.dll"),
-        ])
+    search_dirs = [_CWD_DIR / "bin", _PROJECT_DIR / "bin"]
+    registry_subkeys = [
+        r"SOFTWARE\TOOMOSS\USB2XXX",
+        r"SOFTWARE\WOW6432Node\TOOMOSS\USB2XXX",
+        r"SOFTWARE\USB2XXX",
+        r"SOFTWARE\WOW6432Node\USB2XXX",
+    ]
+    registry_value_names = ["InstallDir", "Path", ""]
 
-    _load_first_existing(windll.LoadLibrary, dep_candidates)
-    USB2XXXLib = _load_first_existing(windll.LoadLibrary, lib_candidates)
+    if "64bit" in platform.architecture()[0]:
+        # Runtime is 64-bit: load directly from local bin directories only.
+        USB2XXXDep = _load_windows_dll_from_bin_only("libusb-1.0.dll", search_dirs)
+        USB2XXXLib = _load_windows_dll_from_bin_only("USB2XXX.dll", search_dirs)
+    else:
+        dep_search_dirs = search_dirs + [_PROJECT_DIR / "libs" / "windows" / "x86_32"]
+        lib_search_dirs = search_dirs + [_PROJECT_DIR / "libs" / "windows" / "x86_32"]
+
+        USB2XXXDep = load_windows_dll(
+            dll_names=["libusb-1.0.dll"],
+            registry_subkeys=registry_subkeys,
+            registry_value_names=registry_value_names,
+            search_dirs=dep_search_dirs,
+        )
+        USB2XXXLib = load_windows_dll(
+            dll_names=["USB2XXX.dll"],
+            registry_subkeys=registry_subkeys,
+            registry_value_names=registry_value_names,
+            search_dirs=lib_search_dirs,
+        )
 elif platform.system() == "Darwin":
-    dep_candidates = [os.path.join(_PROJECT_DIR, "libs", "mac_os", "libusb-1.0.0.dylib")]
-    lib_candidates = [os.path.join(_PROJECT_DIR, "libs", "mac_os", "libUSB2XXX.dylib")]
-    _load_first_existing(cdll.LoadLibrary, dep_candidates)
-    USB2XXXLib = _load_first_existing(cdll.LoadLibrary, lib_candidates)
+    dep_path = _PROJECT_DIR / "libs" / "mac_os" / "libusb-1.0.0.dylib"
+    lib_path = _PROJECT_DIR / "libs" / "mac_os" / "libUSB2XXX.dylib"
+    cdll.LoadLibrary(str(dep_path))
+    USB2XXXLib = cdll.LoadLibrary(str(lib_path))
 else:
     raise RuntimeError(f"Unsupported platform for USB2XXX: {platform.system()}")
 
 
-# 扫描设备并获取设备号
 def USB_ScanDevice(pDevHandle):
     return USB2XXXLib.USB_ScanDevice(pDevHandle)
 
-# 打开设备
+
 def USB_OpenDevice(DevHandle):
     return USB2XXXLib.USB_OpenDevice(DevHandle)
 
-# 复位设备，复位后需要调用设备重连函数
+
 def USB_ResetDevice(DevHandle):
     return USB2XXXLib.USB_ResetDevice(DevHandle)
 
-# 重连设备，检测到USB断开连接后可以调用该函数恢复连接
+
 def USB_RetryConnect(DevHandle):
     return USB2XXXLib.USB_RetryConnect(DevHandle)
 
-# 等待设备重连成功
-def USB_WaitResume(DevHandle,TimeOutMs):
-    return USB2XXXLib.USB_WaitResume(DevHandle,TimeOutMs)
 
-# 获取设备固件信息
+def USB_WaitResume(DevHandle, TimeOutMs):
+    return USB2XXXLib.USB_WaitResume(DevHandle, TimeOutMs)
+
+
 def DEV_GetDeviceInfo(DevHandle, pDevInfo, pFunctionStr):
     return USB2XXXLib.DEV_GetDeviceInfo(DevHandle, pDevInfo, pFunctionStr)
 
-# 获取设备硬件信息
+
 def DEV_GetHardwareInfo(DevHandle, pHardwareInfo):
     return USB2XXXLib.DEV_GetHardwareInfo(DevHandle, pHardwareInfo)
 
-# 关闭设备，一般是在程序退出时才调用
+
 def USB_CloseDevice(DevHandle):
     return USB2XXXLib.USB_CloseDevice(DevHandle)
+
 
 def DEV_EraseUserData(DevHandle):
     return USB2XXXLib.DEV_EraseUserData(DevHandle)
 
-def DEV_WriteUserData(DevHandle,OffsetAddr,pWriteData,DataLen):
-    return USB2XXXLib.DEV_WriteUserData(DevHandle,OffsetAddr,pWriteData,DataLen)
 
-def DEV_ReadUserData(DevHandle,OffsetAddr,pReadData,DataLen):
-    return USB2XXXLib.DEV_ReadUserData(DevHandle,OffsetAddr,pReadData,DataLen)
+def DEV_WriteUserData(DevHandle, OffsetAddr, pWriteData, DataLen):
+    return USB2XXXLib.DEV_WriteUserData(DevHandle, OffsetAddr, pWriteData, DataLen)
 
-def DEV_SetPowerLevel(DevHandle,PowerLevel):
-    return USB2XXXLib.DEV_SetPowerLevel(DevHandle,PowerLevel)
 
-def DEV_GetTimestamp(DevHandle,BusType,pTimestamp):
-    return USB2XXXLib.DEV_GetTimestamp(DevHandle,BusType,pTimestamp)
+def DEV_ReadUserData(DevHandle, OffsetAddr, pReadData, DataLen):
+    return USB2XXXLib.DEV_ReadUserData(DevHandle, OffsetAddr, pReadData, DataLen)
+
+
+def DEV_SetPowerLevel(DevHandle, PowerLevel):
+    return USB2XXXLib.DEV_SetPowerLevel(DevHandle, PowerLevel)
+
+
+def DEV_GetTimestamp(DevHandle, BusType, pTimestamp):
+    return USB2XXXLib.DEV_GetTimestamp(DevHandle, BusType, pTimestamp)
+
 
 def DEV_ResetTimestamp(DevHandle):
     return USB2XXXLib.DEV_ResetTimestamp(DevHandle)
 
-# 获取库编译日期
+
 def DEV_GetDllBuildTime(pDateTime):
     return USB2XXXLib.DEV_GetDllBuildTime(pDateTime)
