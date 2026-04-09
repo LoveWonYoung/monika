@@ -6,7 +6,7 @@ from typing import Deque, Optional
 from ...common.types import RawCanMsg
 from ...hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
 from ..interface import CanDeviceInterface
-from .tsmaster_sdk import CANFD_DLC_TO_LEN, TSMasterDll, TLIBCANFD, TSMASTER_OK, dlc_to_payload_len, payload_len_to_dlc
+from .sdk import CANFD_DLC_TO_LEN, TSMasterDll, TLIBCANFD, TSMASTER_OK, dlc_to_payload_len, payload_len_to_dlc
 
 logger = logging.getLogger(__name__)
 

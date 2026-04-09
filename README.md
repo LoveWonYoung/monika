@@ -42,7 +42,7 @@ Equivalent manual commands:
 ```bash
 python -m pip install --upgrade pip setuptools wheel maturin
 python -m maturin develop
-python -m unittest discover -s tests -p 'test_*.py' -v
+python -m unittest discover -s tests -t . -p 'test_*.py' -v
 python -m maturin build
 ```
 
@@ -123,16 +123,31 @@ Suggested split for larger vendor integrations:
 
 ```text
 python/isotp_engine/can_device/backends/
-  pcan.py
-  pcan_sdk.py
-  vector.py
-  vector_sdk.py
-  tsmaster.py
-  tsmaster_sdk.py
+  pcan/
+    __init__.py
+    adapter.py
+    sdk.py
+  vector/
+    __init__.py
+    adapter.py
+    sdk.py
+  tsmaster/
+    __init__.py
+    adapter.py
+    sdk.py
 ```
 
 ## Test
 
 ```bash
-python -m unittest discover -s tests -p 'test_*.py' -v
+python -m unittest discover -s tests -t . -p 'test_*.py' -v
+```
+
+Suggested layout:
+
+```text
+tests/
+  bindings/
+  lin_device/
+  integration/
 ```
