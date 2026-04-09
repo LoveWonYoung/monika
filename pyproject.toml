@@ -15,6 +15,9 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
+[project.scripts]
+isotp-engine = "isotp_engine.cli:main"
+
 [tool.maturin]
 python-source = "python"
 module-name = "isotp_engine._native"

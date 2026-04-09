@@ -8,7 +8,6 @@ Rust-backed ISO-TP / LIN-TP engine with Python bindings.
 - `python/isotp_engine/` — installable Python package
 - `tests/` — Python unit tests
 - `examples/` — runnable source-tree demos
-- `scripts/` — manual / ad-hoc scripts
 - `.github/workflows/CI.yml` — wheel / sdist build pipeline
 
 ## Development setup
@@ -56,6 +55,8 @@ python -c "from isotp_engine.bindings import IsoTpEngine, LinTpEngine; print(Iso
 ## Demo entrypoints
 
 ```bash
+isotp-engine can
+isotp-engine lin
 python -m isotp_engine can
 python -m isotp_engine lin
 python examples/can_demo.py

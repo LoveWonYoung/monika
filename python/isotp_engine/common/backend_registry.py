@@ -27,7 +27,3 @@ class BackendRegistry:
             else:
                 out[name] = True
         return out
-
-    @property
-    def names(self) -> tuple[str, ...]:
-        return tuple(self._entries.keys())
