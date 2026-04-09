@@ -215,6 +215,18 @@ class Toomoss(CanDeviceInterface):
             if self._log_frames:
                 _print_can_frame("RX", can_id, data, is_fd)
 
+            # Some USB2XXX devices occasionally report glitch frames with DLC=0.
+            # ISO-TP cannot consume empty CAN payloads, so drop them at the HW adapter boundary.
+            if not data:
+                self._dropped_frames += 1
+                logger.warning(
+                    "Dropped empty RX frame from Toomoss: ID=0x%X Flags=0x%X DLC=%s",
+                    int(frame.ID) & CANFD_MSG_FLAG_ID_MASK,
+                    int(frame.Flags),
+                    int(frame.DLC),
+                )
+                continue
+
             if len(self._buf) == self._buf.maxlen:
                 self._dropped_frames += 1
             self._buf.append(RawCanMsg(id=can_id, data=data, isfd=is_fd))

@@ -11,6 +11,7 @@ from ctypes import *
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 _PROJECT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
+_CWD_DIR = os.path.abspath(os.getcwd())
 
 
 # 设备固件信息定义
@@ -69,14 +70,38 @@ def _load_first_existing(loader, candidates):
     raise RuntimeError(f"No USB2XXX library found in candidates: {candidates}")
 
 
+def _unique_paths(paths):
+    seen = set()
+    unique = []
+    for path in paths:
+        norm = os.path.normcase(os.path.abspath(path))
+        if norm in seen:
+            continue
+        seen.add(norm)
+        unique.append(path)
+    return unique
+
+
 # 根据系统自动导入对应的库文件，尽量使用与文件位置相关的绝对路径。
 if platform.system() == "Windows":
     if "64bit" in platform.architecture()[0]:
-        dep_candidates = [os.path.join(_PROJECT_DIR, "bin", "libusb-1.0.dll")]
-        lib_candidates = [os.path.join(_PROJECT_DIR, "bin", "USB2XXX.dll")]
+        dep_candidates = _unique_paths([
+            os.path.join(_CWD_DIR, "bin", "libusb-1.0.dll"),
+            os.path.join(_PROJECT_DIR, "bin", "libusb-1.0.dll"),
+        ])
+        lib_candidates = _unique_paths([
+            os.path.join(_CWD_DIR, "bin", "USB2XXX.dll"),
+            os.path.join(_PROJECT_DIR, "bin", "USB2XXX.dll"),
+        ])
     else:
-        dep_candidates = [os.path.join(_PROJECT_DIR, "libs", "windows", "x86_32", "libusb-1.0.dll")]
-        lib_candidates = [os.path.join(_PROJECT_DIR, "libs", "windows", "x86_32", "USB2XXX.dll")]
+        dep_candidates = _unique_paths([
+            os.path.join(_CWD_DIR, "bin", "libusb-1.0.dll"),
+            os.path.join(_PROJECT_DIR, "libs", "windows", "x86_32", "libusb-1.0.dll"),
+        ])
+        lib_candidates = _unique_paths([
+            os.path.join(_CWD_DIR, "bin", "USB2XXX.dll"),
+            os.path.join(_PROJECT_DIR, "libs", "windows", "x86_32", "USB2XXX.dll"),
+        ])
 
     _load_first_existing(windll.LoadLibrary, dep_candidates)
     USB2XXXLib = _load_first_existing(windll.LoadLibrary, lib_candidates)
