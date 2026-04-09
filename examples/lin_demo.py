@@ -1,4 +1,5 @@
-from isotp_engine.lin_device.main import main
+from isotp_engine.cli import run_lin_demo
+
 
 if __name__ == "__main__":
-    main()
+    run_lin_demo()

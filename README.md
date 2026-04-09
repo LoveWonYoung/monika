@@ -58,6 +58,8 @@ python -c "from isotp_engine.bindings import IsoTpEngine, LinTpEngine; print(Iso
 ```bash
 python -m isotp_engine can
 python -m isotp_engine lin
+python examples/can_demo.py
+python examples/lin_demo.py
 python examples/udsoncan_demo.py
 ```
 

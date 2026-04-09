@@ -1,4 +1,5 @@
-from isotp_engine.can_device.main import main
+from isotp_engine.cli import run_can_demo
+
 
 if __name__ == "__main__":
-    main()
+    run_can_demo()
