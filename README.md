@@ -35,6 +35,8 @@ make test
 make build
 ```
 
+Note: `uv.lock` is currently just a leftover workspace lockfile and is not part of the main maturin/Cargo build flow.
+
 Equivalent manual commands:
 
 ```bash
@@ -123,6 +125,10 @@ Suggested split for larger vendor integrations:
 python/isotp_engine/can_device/backends/
   pcan.py
   pcan_sdk.py
+  vector.py
+  vector_sdk.py
+  tsmaster.py
+  tsmaster_sdk.py
 ```
 
 ## Test
