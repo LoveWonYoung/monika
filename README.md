@@ -1,39 +1,132 @@
-# monika
+# isotp_engine
 
-Mixed Rust/Python workspace for the `isotp_engine` transport stack.
+Rust-backed ISO-TP / LIN-TP engine with Python bindings.
 
 ## Repository layout
 
-- `myo3/` — main mixed Rust/Python project
-- `myo3/src/` — Rust ISO-TP / LIN-TP engine and PyO3 exports
-- `myo3/python/isotp_engine/` — installable Python package
-- `myo3/tests/` — Python tests
-- `myo3/examples/` — source-tree demos
-- `myo3/scripts/` — ad-hoc local scripts
+- `src/` — Rust transport engine and PyO3 exports
+- `python/isotp_engine/` — installable Python package
+- `tests/` — Python unit tests
+- `examples/` — runnable source-tree demos
+- `scripts/` — manual / ad-hoc scripts
+- `.github/workflows/CI.yml` — wheel / sdist build pipeline
 
-## Quick start
+## Development setup
+
+Create and activate a virtual environment from the repository root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Install the mixed project in editable mode:
+
+```bash
+python -m pip install --upgrade pip setuptools wheel maturin
+python -m maturin develop
+```
+
+## Common tasks
 
 ```bash
 make dev
 make test
+make build
 ```
 
 Equivalent manual commands:
 
 ```bash
-cd myo3
 python -m pip install --upgrade pip setuptools wheel maturin
 python -m maturin develop
 python -m unittest discover -s tests -p 'test_*.py' -v
+python -m maturin build
 ```
 
-## Documentation
+## Verify install
 
-Detailed package layout, usage examples, and backend notes live in:
+```bash
+python -c "import isotp_engine; print(isotp_engine.__file__)"
+python -c "from isotp_engine.bindings import IsoTpEngine, LinTpEngine; print(IsoTpEngine, LinTpEngine)"
+```
 
-- `myo3/README.md`
+## Demo entrypoints
 
-## Notes
+```bash
+python -m isotp_engine can
+python -m isotp_engine lin
+python examples/udsoncan_demo.py
+```
 
-- The repository root is a lightweight workspace shell.
-- The main implementation and packaging logic live under `myo3/`.
+## Package layout
+
+Installed package layout:
+
+- `isotp_engine` — top-level Python package
+- `isotp_engine._native` — Rust extension module built by maturin / PyO3
+- `isotp_engine.bindings` — high-level transport API
+- `isotp_engine.can_device` — CAN device workers, interfaces, fake devices, backends
+- `isotp_engine.lin_device` — LIN device workers, interfaces, and backends
+- `isotp_engine.hw` — shared hardware-facing helpers
+- `isotp_engine.common` — shared data types
+- `isotp_engine.utils` — utility helpers
+
+## Import examples
+
+```python
+from isotp_engine.bindings import IsoTpEngine, LinTpEngine, TpConfig, LinTpConfig
+from isotp_engine.can_device.worker import CanTpWorker
+from isotp_engine.can_device.fake import FakeEcu
+from isotp_engine.can_device.udsoncan_connection import UdsoncanIsoTpConnection
+from isotp_engine.lin_device.worker import LinTpWorker
+from isotp_engine.common.types import RawCanMsg, RawLinMsg
+```
+
+## udsoncan integration
+
+```python
+import udsoncan.configs
+from udsoncan.client import Client
+from isotp_engine.can_device.backends.toomoss_canfd import Toomoss
+from isotp_engine.can_device.udsoncan_connection import UdsoncanIsoTpConnection
+
+cfg = udsoncan.configs.default_client_config.copy()
+cfg["request_timeout"] = 5.0
+
+with Toomoss() as hw:
+    conn = UdsoncanIsoTpConnection(hw=hw, req_id=0x5B1, resp_id=0x5B9, func_id=0x7DF, is_fd=True)
+    with Client(conn, config=cfg) as client:
+        response = client.read_data_by_identifier(0xF194)
+        print(response)
+```
+
+## Backend probing
+
+```python
+from isotp_engine.can_device import available_backends as can_backends
+from isotp_engine.lin_device import available_backends as lin_backends
+
+print(can_backends())
+print(lin_backends())
+```
+
+## Where to add a new device backend
+
+- new CAN device → `python/isotp_engine/can_device/backends/`
+- new LIN device → `python/isotp_engine/lin_device/backends/`
+- shared low-level helpers → `python/isotp_engine/hw/`
+
+Suggested split for larger vendor integrations:
+
+```text
+python/isotp_engine/can_device/backends/
+  pcan.py
+  pcan_sdk.py
+```
+
+## Test
+
+```bash
+python -m unittest discover -s tests -p 'test_*.py' -v
+```

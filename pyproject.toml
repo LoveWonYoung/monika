@@ -1,6 +1,21 @@
+[build-system]
+requires = ["maturin>=1.12,<2.0"]
+build-backend = "maturin"
+
 [project]
-name = "monika-workspace"
-version = "0.1.0"
-description = "Workspace shell for the monika mixed Rust/Python transport project"
-requires-python = ">=3.10"
-dependencies = []
+name = "isotp-engine"
+version = "0.1.2"
+description = "Rust-backed ISO-TP / LIN-TP engine with Python bindings"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "isotp_engine._native"
+features = ["pyo3/extension-module"]
