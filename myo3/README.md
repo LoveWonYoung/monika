@@ -5,6 +5,9 @@ The Rust side provides the transport engine, and the Python side provides the in
 
 ## Layout
 
+This directory is the real project root for the mixed Rust/Python package.
+The repository root only acts as a thin workspace shell.
+
 Top-level directories:
 
 - `src/` — Rust transport engine and PyO3 exports
