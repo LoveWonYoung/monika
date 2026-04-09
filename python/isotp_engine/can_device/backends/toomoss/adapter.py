@@ -4,11 +4,11 @@ from collections import deque
 from ctypes import byref, c_uint
 from typing import Deque, Optional
 
-from ...common.types import RawCanMsg
+from ....common.types import RawCanMsg
 
-from ...hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
-from ..interface import CanDeviceInterface
-from .toomoss_usb2canfd import (
+from ....hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
+from ...interface import CanDeviceInterface
+from .sdk import (
     CANFD_GetCANSpeedArg,
     CANFD_GetMsg,
     CANFD_Init,
@@ -22,7 +22,7 @@ from .toomoss_usb2canfd import (
     CANFD_StopGetMsg,
     CANFD_SUCCESS,
 )
-from ...hw.toomoss_usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice
+from ....hw.toomoss_usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice
 
 ToomossCAN1 = 0
 ToomossCAN2 = 1

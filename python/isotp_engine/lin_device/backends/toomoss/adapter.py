@@ -3,11 +3,11 @@ from collections import deque
 from ctypes import byref, c_uint
 from typing import Deque, Optional
 
-from ...common.types import RawLinMsg
+from ....common.types import RawLinMsg
 
-from ...hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
-from ...hw.toomoss_usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice
-from .toomoss_usb2lin_ex import (
+from ....hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
+from ....hw.toomoss_usb_device import USB_CloseDevice, USB_OpenDevice, USB_ScanDevice
+from .sdk import (
     LIN_EX_CHECK_EXT,
     LIN_EX_CHECK_STD,
     LIN_EX_Init,

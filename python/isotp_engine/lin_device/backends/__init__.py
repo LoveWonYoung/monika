@@ -1,7 +1,7 @@
 """Concrete LIN backend modules.
 
-Import specific backend modules directly, for example:
-- `isotp_engine.lin_device.backends.toomoss_usb2lin`
+Import specific backend packages directly, for example:
+- `isotp_engine.lin_device.backends.toomoss`
 """
 
 __all__: list[str] = []

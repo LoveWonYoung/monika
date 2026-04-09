@@ -90,7 +90,7 @@ from isotp_engine.common.types import RawCanMsg, RawLinMsg
 ```python
 import udsoncan.configs
 from udsoncan.client import Client
-from isotp_engine.can_device.backends.toomoss_canfd import Toomoss
+from isotp_engine.can_device.backends.toomoss import Toomoss
 from isotp_engine.can_device.udsoncan_connection import UdsoncanIsoTpConnection
 
 cfg = udsoncan.configs.default_client_config.copy()

@@ -2,7 +2,7 @@ import logging
 
 from ..hw.errors import DeviceError
 from ..utils.log_recorder import init_and_rotate
-from .backends.toomoss_usb2lin import ToomossLin
+from .backends.toomoss import ToomossLin
 from .worker import LinTpWorker
 
 

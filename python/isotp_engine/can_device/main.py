@@ -2,7 +2,7 @@ import logging
 
 from ..hw.errors import DeviceError
 from ..utils.log_recorder import init_and_rotate
-from .backends.toomoss_canfd import Toomoss
+from .backends.toomoss import Toomoss
 from .worker import CanTpWorker
 
 
