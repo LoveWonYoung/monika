@@ -235,6 +235,3 @@ class Toomoss(CanDeviceInterface):
             return self._buf.popleft()
         return None
 
-
-# Backward compatibility export.
-from ...lin_device.backends.toomoss_usb2lin import ToomossLin  # noqa: E402

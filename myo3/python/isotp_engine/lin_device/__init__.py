@@ -7,15 +7,11 @@ from .interface import LinMasterDeviceInterface
 from .worker import LinTpWorker
 
 _BACKEND_MODULES = {
-    "toomoss": ".backends.toomoss",
+    "toomoss": ".backends.toomoss_usb2lin",
 }
 
 _BACKEND_CLASS_NAMES = {
     "toomoss": "ToomossLin",
-}
-
-_EXPORT_TO_BACKEND = {
-    "ToomossLin": "toomoss",
 }
 
 
@@ -43,19 +39,9 @@ def available_backends() -> Dict[str, bool]:
     return out
 
 
-def __getattr__(name: str):
-    if name in _EXPORT_TO_BACKEND:
-        try:
-            return get_backend(_EXPORT_TO_BACKEND[name])
-        except (ImportError, OSError, RuntimeError):
-            return None
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 __all__ = [
     "LinMasterDeviceInterface",
     "LinTpWorker",
-    "ToomossLin",
     "available_backends",
     "get_backend",
 ]

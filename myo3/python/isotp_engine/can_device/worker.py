@@ -268,7 +268,3 @@ class CanTpWorker:
     def pop_error(self, timeout_s: float = 0.0) -> Optional[int]:
         return self._worker.pop_error(timeout_s=timeout_s)
 
-
-# Backward compatibility aliases.
-MyHwDeviceWithTpEngine = CanTpClient
-TpWorker = CanTpWorker

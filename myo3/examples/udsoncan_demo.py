@@ -1,15 +1,11 @@
-from isotp_engine.can_device import Toomoss, UdsoncanIsoTpConnection
-
 import udsoncan.configs
 from udsoncan.client import Client
 
+from isotp_engine.can_device.backends.toomoss_canfd import Toomoss
+from isotp_engine.can_device.udsoncan_connection import UdsoncanIsoTpConnection
+
 
 def main() -> None:
-    if Toomoss is None:
-        raise RuntimeError("Toomoss CAN backend is unavailable on this platform/runtime")
-    if UdsoncanIsoTpConnection is None:
-        raise RuntimeError("UdsoncanIsoTpConnection is unavailable. Please install udsoncan first.")
-
     cfg = udsoncan.configs.default_client_config.copy()
     cfg["request_timeout"] = 5.0
 

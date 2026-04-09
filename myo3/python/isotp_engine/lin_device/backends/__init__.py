@@ -1,3 +1,7 @@
-from .toomoss import ToomossLin
+"""Concrete LIN backend modules.
 
-__all__ = ["ToomossLin"]
+Import specific backend modules directly, for example:
+- `isotp_engine.lin_device.backends.toomoss_usb2lin`
+"""
+
+__all__: list[str] = []

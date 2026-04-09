@@ -1,17 +1,14 @@
-from .worker import CanTpWorker
-from .backends.toomoss import Toomoss
+import logging
+
 from ..hw.errors import DeviceError
 from ..utils.log_recorder import init_and_rotate
-
-import logging
+from .backends.toomoss_canfd import Toomoss
+from .worker import CanTpWorker
 
 
 def main() -> None:
     init_and_rotate(log_name="can_tp_", interval_minutes=10)
     logger = logging.getLogger(__name__)
-
-    if Toomoss is None:
-        raise RuntimeError("Toomoss CAN backend is unavailable on this platform/runtime")
 
     try:
         with Toomoss() as hw:

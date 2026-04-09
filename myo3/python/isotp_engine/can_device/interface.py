@@ -12,7 +12,3 @@ class CanDeviceInterface(ABC):
     @abstractmethod
     def txfn(self, can_id: int, data: bytes, is_fd: bool) -> None:
         raise NotImplementedError
-
-
-# Backward compatibility alias.
-MyHwDeviceInterface = CanDeviceInterface

@@ -124,7 +124,7 @@ python examples/udsoncan_demo.py
 from isotp_engine.bindings import IsoTpEngine, LinTpEngine, TpConfig, LinTpConfig
 from isotp_engine.can_device.worker import CanTpWorker
 from isotp_engine.can_device.fake import FakeEcu
-from isotp_engine.can_device import UdsoncanIsoTpConnection
+from isotp_engine.can_device.udsoncan_connection import UdsoncanIsoTpConnection
 from isotp_engine.lin_device.worker import LinTpWorker
 from isotp_engine.common.types import RawCanMsg, RawLinMsg
 ```
@@ -137,7 +137,8 @@ This keeps TP in Rust (`IsoTpEngine`) and lets `udsoncan.Client` keep UDS servic
 ```python
 import udsoncan.configs
 from udsoncan.client import Client
-from isotp_engine.can_device import Toomoss, UdsoncanIsoTpConnection
+from isotp_engine.can_device.backends.toomoss_canfd import Toomoss
+from isotp_engine.can_device.udsoncan_connection import UdsoncanIsoTpConnection
 
 cfg = udsoncan.configs.default_client_config.copy()
 cfg["request_timeout"] = 5.0
@@ -172,7 +173,7 @@ If the PCAN implementation needs vendor-specific ctypes definitions or helper wr
 ```text
 python/isotp_engine/can_device/backends/
   pcan.py
-  pcan_basic.py
+  pcan_sdk.py
 ```
 
 Suggested responsibilities:
@@ -182,7 +183,7 @@ Suggested responsibilities:
   - implements the read/write behavior expected by `CanTpWorker`
   - converts vendor frames into `RawCanMsg`
 
-- `pcan_basic.py`
+- `pcan_sdk.py`
   - raw ctypes / SDK constants / structure definitions
   - thin wrapper over vendor API
 
@@ -251,9 +252,9 @@ Then usage stays clean:
 
 ```python
 from isotp_engine.can_device.worker import CanTpWorker
-from isotp_engine.can_device.backends.pcan import PcanCanDevice
+from isotp_engine.can_device.backends.pcan import Pcan
 
-with PcanCanDevice(channel="PCAN_USBBUS1", bitrate=500000) as hw:
+with Pcan(channel="PCAN_USBBUS1", bitrate=500000) as hw:
     with CanTpWorker(hw=hw, req_id=0x7E0, resp_id=0x7E8, func_id=0x7DF) as dev:
         rsp = dev.uds_request(bytes([0x22, 0xF1, 0x90]))
         print(rsp)
@@ -313,7 +314,7 @@ A good rule of thumb:
 If you add PCAN later, I would do it in this order:
 
 1. Add `python/isotp_engine/can_device/backends/pcan.py`
-2. Add SDK-specific wrapper if needed, e.g. `pcan_basic.py`
+2. Add SDK-specific wrapper if needed, e.g. `pcan_sdk.py`
 3. Make it implement `CanDeviceInterface`
 4. Add a small fake-free unit/integration test if practical
 5. Optionally add an example under `examples/pcan_demo.py`

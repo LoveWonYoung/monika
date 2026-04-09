@@ -1,6 +1,10 @@
-from .toomoss import Toomoss
-from .pcan import Pcan
-from .vector import Vector
-from .tsmaster import TSMaster
+"""Concrete CAN backend modules.
 
-__all__ = ["Toomoss", "Pcan", "Vector", "TSMaster"]
+Import specific backend modules directly, for example:
+- `isotp_engine.can_device.backends.toomoss_canfd`
+- `isotp_engine.can_device.backends.pcan`
+- `isotp_engine.can_device.backends.vector`
+- `isotp_engine.can_device.backends.tsmaster`
+"""
+
+__all__: list[str] = []
