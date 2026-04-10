@@ -3,8 +3,8 @@ import platform
 from ctypes import POINTER
 from pathlib import Path
 
-from ...hw.errors import DeviceOpenError
-from ...hw.windows_dll import load_windows_dll
+from ....hw.errors import DeviceOpenError
+from ....hw.windows_dll import load_windows_dll
 
 CANFD_DLC_TO_LEN = (0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64)
 CANFD_LEN_TO_DLC = {length: dlc for dlc, length in enumerate(CANFD_DLC_TO_LEN)}

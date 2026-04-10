@@ -3,17 +3,17 @@ import logging
 from collections import deque
 from typing import Deque, Optional
 
-from ...common.types import RawCanMsg
-from ...hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
-from ..interface import CanDeviceInterface
-from .sdk import CANFD_DLC_TO_LEN, TSMasterDll, TLIBCANFD, TSMASTER_OK, dlc_to_payload_len, payload_len_to_dlc
+from ....common.types import RawCanMsg
+from ....hw.errors import DeviceInitError, DeviceNotFoundError, DeviceOpenError, DeviceSendError
+from ...interface import CanDeviceInterface
+from .sdk import CANFD_LEN_TO_DLC, TSMasterDll, TLIBCANFD, TSMASTER_OK, dlc_to_payload_len, payload_len_to_dlc
 
 logger = logging.getLogger(__name__)
 
 
 def _format_can_frame(can_id: int, data: bytes, is_fd: bool) -> str:
     frame_type = "CAN-FD" if is_fd else "CAN"
-    dlc = CANFD_DLC_TO_LEN[len(data)] if is_fd else len(data)
+    dlc = CANFD_LEN_TO_DLC[len(data)] if is_fd else len(data)
     return f"ID=0x{can_id:X} Type={frame_type} DLC={dlc} Data=[{data.hex(' ')}]"
 
 

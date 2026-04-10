@@ -2,9 +2,9 @@ import logging
 from collections import deque
 from typing import Deque, Optional, Union
 
-from ...common.types import RawCanMsg
-from ...hw.errors import DeviceInitError, DeviceOpenError, DeviceSendError
-from ..interface import CanDeviceInterface
+from ....common.types import RawCanMsg
+from ....hw.errors import DeviceInitError, DeviceOpenError, DeviceSendError
+from ...interface import CanDeviceInterface
 from .sdk import (
     CANFD_DLC_TO_LEN,
     CANFD_LEN_TO_DLC,
