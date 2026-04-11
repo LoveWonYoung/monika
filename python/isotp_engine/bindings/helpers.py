@@ -25,16 +25,16 @@ def parse_uds_negative_response(payload: bytes) -> tuple[int, int, int]:
 
 def build_uds_default_matcher(request: bytes) -> Callable[[bytes], bool]:
     req = bytes(request)
-    sid = req[0] if req else None
+    if not req:
+        raise ValueError("request payload must not be empty")
+    sid = req[0]
 
     def matcher(response: bytes) -> bool:
         rsp = bytes(response)
         if not rsp:
             return False
         if is_uds_response_pending(rsp):
-            return sid is not None and rsp[1] == sid
-        if sid is None:
-            return True
+            return rsp[1] == sid if len(rsp) >= 2 else False
         if rsp[0] == 0x7F:
             return len(rsp) >= 2 and rsp[1] == sid
         if rsp[0] != ((sid + 0x40) & 0xFF):
@@ -96,21 +96,27 @@ def send_uds_and_wait_final(
     response_matcher: Optional[Callable[[bytes], bool]] = None,
 ) -> bytes:
     matcher = response_matcher or build_uds_default_matcher(payload)
-    deadline = monotonic_ms() + int(overall_timeout_ms)
+    now = monotonic_ms()
+    deadline = now + int(overall_timeout_ms)
     next_deadline = deadline
-    tp.tx_uds_msg(payload, functional=functional, ts_ms=monotonic_ms())
+    tp.tx_uds_msg(payload, functional=functional, ts_ms=now)
     while True:
         now = monotonic_ms()
         if now > next_deadline:
             raise IsoTpError(-106)
         step_once(tp=tp, rxfunc=rxfunc, txfunc=txfunc, ts_ms=now)
+        received: list[bytes] = []
         while True:
             msg = tp.rx_uds_msg()
             if msg is None:
                 break
+            received.append(msg)
+        for i, msg in enumerate(received):
             if not matcher(msg):
                 tp._pending_uds.append(msg)
                 continue
+            for leftover in received[i + 1 :]:
+                tp._pending_uds.append(leftover)
             if is_uds_response_pending(msg):
                 next_deadline = min(deadline, monotonic_ms() + int(pending_gap_ms))
                 break
@@ -133,21 +139,27 @@ def send_uds_and_wait_final_lin(
     response_matcher: Optional[Callable[[bytes], bool]] = None,
 ) -> bytes:
     matcher = response_matcher or build_uds_default_matcher(payload)
-    deadline = monotonic_ms() + int(overall_timeout_ms)
+    now = monotonic_ms()
+    deadline = now + int(overall_timeout_ms)
     next_deadline = deadline
-    tp.tx_uds_msg(payload, functional=functional, ts_ms=monotonic_ms())
+    tp.tx_uds_msg(payload, functional=functional, ts_ms=now)
     while True:
         now = monotonic_ms()
         if now > next_deadline:
             raise IsoTpError(-106)
         step_once_lin(tp=tp, rxfunc=rxfunc, txfunc=txfunc, ts_ms=now)
+        received_lin: list[bytes] = []
         while True:
             msg = tp.rx_uds_msg()
             if msg is None:
                 break
+            received_lin.append(msg)
+        for i, msg in enumerate(received_lin):
             if not matcher(msg):
                 tp._pending_uds.append(msg)
                 continue
+            for leftover in received_lin[i + 1 :]:
+                tp._pending_uds.append(leftover)
             if is_uds_response_pending(msg):
                 next_deadline = min(deadline, monotonic_ms() + int(pending_gap_ms))
                 break
