@@ -146,6 +146,7 @@ def send_uds_and_wait_final_lin(
             if msg is None:
                 break
             if not matcher(msg):
+                tp._pending_uds.append(msg)
                 continue
             if is_uds_response_pending(msg):
                 next_deadline = min(deadline, monotonic_ms() + int(pending_gap_ms))

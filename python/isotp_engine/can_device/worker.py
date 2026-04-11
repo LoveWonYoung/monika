@@ -73,12 +73,36 @@ class CanTpClient:
                 poll_interval_ms=1,
             )
 
+    def _build_tester_present_sf(self, functional: bool) -> tuple[int, bytes, bool]:
+        """Build a raw ISO-TP single-frame TesterPresent (0x3E 0x80) without
+        touching the TP engine, so it can be sent from any thread at any time."""
+        can_id = self._tp.func_id if functional else self._tp.req_id
+        # ISO-TP SF PCI: high nibble = 0 (SF), low nibble = length (2)
+        frame = bytes([0x02, 0x3E, 0x80])
+        if not self._tp.is_fd:
+            frame = frame.ljust(8, b"\x00")
+        return can_id, frame, self._tp.is_fd
+
     def keep_alive(
         self,
         interval_s: float = 2.0,
         functional: bool = True,
+        locking: bool = True,
         stop_event: Optional[threading.Event] = None,
     ) -> None:
+        """Periodically send TesterPresent (0x3E 0x80).
+
+        locking=True  (default): acquire _tp_lock before each send. The
+            TesterPresent is serialized with uds_request, so it never lands
+            inside a consecutive-frame window. The trade-off is that it may
+            be delayed until the current multi-frame exchange completes.
+
+        locking=False: bypass _tp_lock entirely by constructing the ISO-TP
+            single frame manually and writing it straight to the hardware.
+            The frame can be injected between consecutive frames, which keeps
+            the ECU session alive even during long multi-frame transfers, but
+            may violate the N_Cs timing contract perceived by the ECU.
+        """
         if interval_s <= 0:
             raise ValueError("interval_s must be > 0")
 
@@ -86,21 +110,30 @@ class CanTpClient:
         keep_alive_payload = bytes([0x3E, 0x80])
         while not evt.is_set():
             try:
-                with self._tp_lock:
-                    self._tp.tx_uds_msg(
-                        payload=keep_alive_payload,
-                        functional=functional,
-                        ts_ms=monotonic_ms(),
-                        response_timeout_ms=None,
-                    )
-                    step_once(tp=self._tp, rxfunc=self._rxfunc_for_isotp, txfunc=self._hw.txfn)
-                    self._tp.clear_pending_uds_messages()
+                if locking:
+                    with self._tp_lock:
+                        self._tp.tx_uds_msg(
+                            payload=keep_alive_payload,
+                            functional=functional,
+                            ts_ms=monotonic_ms(),
+                            response_timeout_ms=None,
+                        )
+                        step_once(tp=self._tp, rxfunc=self._rxfunc_for_isotp, txfunc=self._hw.txfn)
+                        self._tp.clear_pending_uds_messages()
+                else:
+                    can_id, frame, is_fd = self._build_tester_present_sf(functional)
+                    self._hw.txfn(can_id, frame, is_fd)
             except Exception:
                 logger.exception("keep_alive error")
 
             evt.wait(interval_s)
 
-    def start_keep_alive(self, interval_s: float = 2.0, functional: bool = True) -> None:
+    def start_keep_alive(
+        self,
+        interval_s: float = 2.0,
+        functional: bool = True,
+        locking: bool = True,
+    ) -> None:
         if self._keep_alive_thread is not None and self._keep_alive_thread.is_alive():
             return
 
@@ -110,6 +143,7 @@ class CanTpClient:
             kwargs={
                 "interval_s": interval_s,
                 "functional": functional,
+                "locking": locking,
                 "stop_event": self._keep_alive_stop_evt,
             },
             name="CanTpKeepAlive",
@@ -142,6 +176,9 @@ class CanTpWorker:
         bridge_sleep_ms: int = 1,
     ):
         self._hw = hw
+        self._req_id = req_id
+        self._func_id = func_id
+        self._is_fd = is_fd
         self._worker = IsoTpEngineWorker(
             req_id=req_id,
             resp_id=resp_id,
@@ -210,6 +247,8 @@ class CanTpWorker:
         functional: bool = False,
         timeout_ms: int = 10000,
     ) -> bytes:
+        if self._bridge_thread is None or not self._bridge_thread.is_alive():
+            raise RuntimeError("CanTpWorker is not running; call start() first")
         return self._worker.tx_uds_msg(
             payload=payload,
             functional=functional,
@@ -218,12 +257,32 @@ class CanTpWorker:
             poll_interval_ms=1,
         )
 
+    def _build_tester_present_sf(self, functional: bool) -> tuple[int, bytes, bool]:
+        """Build a raw ISO-TP single-frame TesterPresent (0x3E 0x80) without
+        touching the TP engine, so it can be sent from any thread at any time."""
+        can_id = self._func_id if functional else self._req_id
+        frame = bytes([0x02, 0x3E, 0x80])
+        if not self._is_fd:
+            frame = frame.ljust(8, b"\x00")
+        return can_id, frame, self._is_fd
+
     def keep_alive(
         self,
         interval_s: float = 2.0,
         functional: bool = True,
+        locking: bool = True,
         stop_event: Optional[threading.Event] = None,
     ) -> None:
+        """Periodically send TesterPresent (0x3E 0x80).
+
+        locking=True  (default): route through IsoTpEngineWorker.tx_uds_msg,
+            which is serialized with the internal worker lock. TesterPresent
+            is queued after the current exchange completes; no CF interruption.
+
+        locking=False: construct the ISO-TP single frame manually and write
+            it directly to hardware via the bridge's txfn. The frame bypasses
+            the worker queue and can be injected between consecutive frames.
+        """
         if interval_s <= 0:
             raise ValueError("interval_s must be > 0")
 
@@ -231,17 +290,26 @@ class CanTpWorker:
         keep_alive_payload = bytes([0x3E, 0x80])
         while not evt.is_set():
             try:
-                self._worker.tx_uds_msg(
-                    payload=keep_alive_payload,
-                    functional=functional,
-                    response_timeout_ms=None,
-                )
+                if locking:
+                    self._worker.tx_uds_msg(
+                        payload=keep_alive_payload,
+                        functional=functional,
+                        response_timeout_ms=None,
+                    )
+                else:
+                    can_id, frame, is_fd = self._build_tester_present_sf(functional)
+                    self._hw.txfn(can_id, frame, is_fd)
             except Exception:
                 logger.exception("worker keep_alive error")
 
             evt.wait(interval_s)
 
-    def start_keep_alive(self, interval_s: float = 2.0, functional: bool = True) -> None:
+    def start_keep_alive(
+        self,
+        interval_s: float = 2.0,
+        functional: bool = True,
+        locking: bool = True,
+    ) -> None:
         if self._keep_alive_thread is not None and self._keep_alive_thread.is_alive():
             return
 
@@ -252,6 +320,7 @@ class CanTpWorker:
             kwargs={
                 "interval_s": interval_s,
                 "functional": functional,
+                "locking": locking,
                 "stop_event": self._keep_alive_stop_evt,
             },
             name="CanTpWorkerKeepAlive",

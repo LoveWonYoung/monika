@@ -129,6 +129,7 @@ class LinTpEngine:
         self.func_nad = int(func_nad)
         self.cfg = cfg or LinTpConfig(*_ffi._native.lintp_default_config())
         self._closed = False
+        self._pending_uds: Deque[bytes] = deque()
 
     def close(self) -> None:
         if not self._closed:
@@ -186,6 +187,8 @@ class LinTpEngine:
             out.append(frame)
 
     def rx_uds_msg(self) -> Optional[bytes]:
+        if self._pending_uds:
+            return self._pending_uds.popleft()
         code, payload = _ffi._native.lintp_rx_uds_msg(self._handle)
         _ffi.raise_if_error(code)
         if code == _ffi.FFI_HAS_ITEM:

@@ -14,6 +14,7 @@ class IsoTpEngineWorker:
         self._tp = IsoTpEngine(req_id, resp_id, func_id, is_fd=is_fd, cfg=cfg)
         self._tick_period_ms = max(1, int(tick_period_ms))
         self._rx_frames: queue.Queue[CanMsg] = queue.Queue()
+        self._tx_cmd_queue: queue.Queue[tuple[bytes, bool]] = queue.Queue()
         self._tx_frames: queue.Queue[tuple[int, bytes, bool]] = queue.Queue()
         self._uds_msgs: queue.Queue[bytes] = queue.Queue()
         self._errors: queue.Queue[int] = queue.Queue()
@@ -47,6 +48,15 @@ class IsoTpEngineWorker:
     def _run(self) -> None:
         while not self._stop_evt.is_set():
             now = monotonic_ms()
+            try:
+                while True:
+                    payload, functional = self._tx_cmd_queue.get_nowait()
+                    try:
+                        self._tp.tx_uds_msg(payload, functional=functional, ts_ms=now)
+                    except IsoTpError as exc:
+                        self._errors.put(exc.code)
+            except queue.Empty:
+                pass
             try:
                 while True:
                     msg = self._rx_frames.get_nowait()
@@ -93,7 +103,7 @@ class IsoTpEngineWorker:
             return None
 
     def tx_uds_msg(self, payload: bytes, functional: bool = False, response_timeout_ms: Optional[int] = 10000, pending_gap_ms: int = 3000, poll_interval_ms: int = 1) -> bytes:
-        self._tp.tx_uds_msg(payload, functional=functional, ts_ms=monotonic_ms())
+        self._tx_cmd_queue.put((bytes(payload), bool(functional)))
         matcher = build_uds_default_matcher(payload)
         if response_timeout_ms is None:
             return b""
@@ -133,6 +143,8 @@ class LinTpEngineWorker:
         self._tp = LinTpEngine(req_frame_id, resp_frame_id, req_nad, func_nad, cfg=cfg)
         self._tick_period_ms = max(1, int(tick_period_ms))
         self._rx_frames: queue.Queue[LinMsg] = queue.Queue()
+        # (payload, functional, req_nad_override_or_None, func_nad_override_or_None)
+        self._tx_cmd_queue: queue.Queue[tuple[bytes, bool, Optional[int], Optional[int]]] = queue.Queue()
         self._tx_frames: queue.Queue[tuple[int, bytes]] = queue.Queue()
         self._uds_msgs: queue.Queue[bytes] = queue.Queue()
         self._errors: queue.Queue[int] = queue.Queue()
@@ -168,6 +180,21 @@ class LinTpEngineWorker:
     def _run(self) -> None:
         while not self._stop_evt.is_set():
             now = monotonic_ms()
+            try:
+                while True:
+                    payload, functional, req_nad, func_nad = self._tx_cmd_queue.get_nowait()
+                    try:
+                        if req_nad is not None or func_nad is not None:
+                            new_req = req_nad if req_nad is not None else self._tp.req_nad
+                            new_func = func_nad if func_nad is not None else self._tp.func_nad
+                            self._tp.set_nad(new_req, new_func)
+                            self.req_nad = int(self._tp.req_nad)
+                            self.func_nad = int(self._tp.func_nad)
+                        self._tp.tx_uds_msg(payload, functional=functional, ts_ms=now)
+                    except IsoTpError as exc:
+                        self._errors.put(exc.code)
+            except queue.Empty:
+                pass
             try:
                 while True:
                     msg = self._rx_frames.get_nowait()
@@ -223,9 +250,9 @@ class LinTpEngineWorker:
         pending_gap_ms: int = 3000,
         poll_interval_ms: int = 1,
     ) -> bytes:
-        if req_nad_override is not None or func_nad_override is not None:
-            self._tp.set_nad(self.req_nad if req_nad_override is None else int(req_nad_override), self.func_nad if func_nad_override is None else int(func_nad_override))
-        self._tp.tx_uds_msg(payload, functional=functional, ts_ms=monotonic_ms())
+        req_nad = int(req_nad_override) if req_nad_override is not None else None
+        func_nad = int(func_nad_override) if func_nad_override is not None else None
+        self._tx_cmd_queue.put((bytes(payload), bool(functional), req_nad, func_nad))
         matcher = build_uds_default_matcher(payload)
         if response_timeout_ms is None:
             return b""
@@ -235,12 +262,16 @@ class LinTpEngineWorker:
         while True:
             timeout_left = max(0.0, (next_deadline - monotonic_ms()) / 1000.0)
             if timeout_left <= 0:
+                for item in stash:
+                    self._uds_msgs.put(item)
                 raise IsoTpError(-106)
             try:
                 msg = self._uds_msgs.get(timeout=min(timeout_left, max(poll_interval_ms, 1) / 1000.0))
             except queue.Empty:
                 err = self.pop_error(timeout_s=0.0)
                 if err is not None:
+                    for item in stash:
+                        self._uds_msgs.put(item)
                     raise IsoTpError(err)
                 continue
             if not matcher(msg):

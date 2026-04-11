@@ -94,14 +94,14 @@ class UdsoncanIsoTpConnection(BaseConnection):
         return self._opened
 
     def close(self) -> None:
-        if self._closed:
-            return
         with self._lock:
+            if self._closed:
+                return
             self._rx_payloads.clear()
             self._pending_errors.clear()
             self._tp.close()
-        self._closed = True
-        self._opened = False
+            self._closed = True
+            self._opened = False
         if self._close_hw_on_close and hasattr(self._hw, "close"):
             self._hw.close()  # type: ignore[func-returns-value]
         self.logger.info("Connection closed")
