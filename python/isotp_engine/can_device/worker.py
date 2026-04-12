@@ -37,7 +37,7 @@ class CanTpClient:
             resp_id=resp_id,
             func_id=func_id,
             is_fd=is_fd,
-            cfg=cfg or TpConfig(n_bs_ms=1000, n_cr_ms=1000, stmin_ms=0, block_size=0),
+            cfg=cfg or TpConfig(n_bs_ms=1000, n_cr_ms=1000, stmin_ms=20, block_size=0),
         )
         self._tp_lock = threading.Lock()
         self._keep_alive_stop_evt = threading.Event()
@@ -174,6 +174,7 @@ class CanTpWorker:
         cfg: Optional[TpConfig] = None,
         tick_period_ms: int = 1,
         bridge_sleep_ms: int = 1,
+        worker_queue_size: int = 1024,
     ):
         self._hw = hw
         self._req_id = req_id
@@ -186,6 +187,7 @@ class CanTpWorker:
             is_fd=is_fd,
             cfg=cfg or TpConfig(n_bs_ms=1000, n_cr_ms=1000, stmin_ms=20, block_size=0),
             tick_period_ms=tick_period_ms,
+            queue_size=worker_queue_size,
         )
         self._bridge_sleep_s = max(0.0, bridge_sleep_ms / 1000.0)
         self._stop_evt = threading.Event()
@@ -204,8 +206,11 @@ class CanTpWorker:
     def stop(self, timeout_s: float = 1.0) -> None:
         self.stop_keep_alive(timeout_s=timeout_s)
         self._stop_evt.set()
-        if self._bridge_thread is not None:
-            self._bridge_thread.join(timeout=timeout_s)
+        bridge_thread = self._bridge_thread
+        if bridge_thread is not None:
+            bridge_thread.join(timeout=timeout_s)
+            if bridge_thread.is_alive():
+                raise TimeoutError(f"CanTpBridge thread did not stop within {timeout_s} seconds")
             self._bridge_thread = None
         self._worker.stop(timeout_s=timeout_s)
 
@@ -330,8 +335,11 @@ class CanTpWorker:
 
     def stop_keep_alive(self, timeout_s: float = 1.0) -> None:
         self._keep_alive_stop_evt.set()
-        if self._keep_alive_thread is not None:
-            self._keep_alive_thread.join(timeout=timeout_s)
+        keep_alive_thread = self._keep_alive_thread
+        if keep_alive_thread is not None:
+            keep_alive_thread.join(timeout=timeout_s)
+            if keep_alive_thread.is_alive():
+                raise TimeoutError(f"CanTpWorkerKeepAlive thread did not stop within {timeout_s} seconds")
             self._keep_alive_thread = None
 
     def pop_error(self, timeout_s: float = 0.0) -> Optional[int]:

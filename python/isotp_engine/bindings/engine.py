@@ -118,6 +118,10 @@ class IsoTpEngine:
     def stash_pending_uds_many(self, payloads: Iterable[bytes]) -> None:
         self._pending_uds.extend(payload if isinstance(payload, bytes) else bytes(payload) for payload in payloads)
 
+    def stash_pending_uds_many_front(self, payloads: Iterable[bytes]) -> None:
+        normalized = [payload if isinstance(payload, bytes) else bytes(payload) for payload in payloads]
+        self._pending_uds.extendleft(reversed(normalized))
+
 
 class LinTpEngine:
     def __init__(self, req_frame_id: int, resp_frame_id: int, req_nad: int, func_nad: int, cfg: Optional[LinTpConfig] = None):
@@ -212,3 +216,7 @@ class LinTpEngine:
 
     def stash_pending_uds_many(self, payloads: Iterable[bytes]) -> None:
         self._pending_uds.extend(payload if isinstance(payload, bytes) else bytes(payload) for payload in payloads)
+
+    def stash_pending_uds_many_front(self, payloads: Iterable[bytes]) -> None:
+        normalized = [payload if isinstance(payload, bytes) else bytes(payload) for payload in payloads]
+        self._pending_uds.extendleft(reversed(normalized))

@@ -23,6 +23,7 @@ ERR_MAP = {
     -108: "FlowControlOverflow",
     -109: "UnexpectedFlowStatus",
     -110: "ParseError",
+    -120: "QueueOverflow",
     ERR_NULL_PTR: "NullPtr",
     ERR_BUFFER_TOO_SMALL: "BufferTooSmall",
 }

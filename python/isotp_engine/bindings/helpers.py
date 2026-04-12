@@ -96,21 +96,13 @@ def step_once_lin(tp: LinTpEngine, rxfunc: Callable[[], Optional[LinMsg]], txfun
         txfunc(*out)
 
 
-def _drain_rx_uds_to_pending(rx_uds_msg: Callable[[], Optional[bytes]], stash_pending_uds: Callable[[bytes], None]) -> None:
-    while True:
-        msg = rx_uds_msg()
-        if msg is None:
-            return
-        stash_pending_uds(msg)
-
-
 def _send_uds_and_wait_final_core(
     *,
     payload: bytes,
     tx_uds_msg: Callable[[bytes, bool, int], None],
     step_fn: Callable[[int], None],
     rx_uds_msg: Callable[[], Optional[bytes]],
-    stash_pending_uds: Callable[[bytes], None],
+    stash_pending_uds_many_front: Callable[[list[bytes]], None],
     functional: bool,
     overall_timeout_ms: int,
     pending_gap_ms: int,
@@ -127,36 +119,37 @@ def _send_uds_and_wait_final_core(
 
     tx_uds_msg(req_payload, functional, now)
 
-    while True:
-        now = monotonic_ms()
-        if now > next_deadline:
-            raise IsoTpError(-106)
-
-        step_fn(now)
-
+    stash: list[bytes] = []
+    try:
         while True:
-            msg = rx_uds_msg()
-            if msg is None:
-                break
+            now = monotonic_ms()
+            if now > next_deadline:
+                raise IsoTpError(-106)
 
-            if not matcher(msg):
-                stash_pending_uds(msg)
-                continue
+            step_fn(now)
 
-            # Preserve message ordering for subsequent requests.
-            _drain_rx_uds_to_pending(rx_uds_msg, stash_pending_uds)
+            while True:
+                msg = rx_uds_msg()
+                if msg is None:
+                    break
 
-            if is_uds_response_pending(msg):
-                next_deadline = min(deadline, monotonic_ms() + pending_gap_ms)
-                break
-            if msg[:1] == b"\x7f":
-                raise UdsNegativeResponseError(msg)
-            return msg
+                if not matcher(msg):
+                    stash.append(msg)
+                    continue
 
-        if poll_interval_ms > 0:
-            sleep_ms = min(poll_interval_ms, max(0, next_deadline - monotonic_ms()))
-            if sleep_ms > 0:
-                time.sleep(sleep_ms / 1000.0)
+                if is_uds_response_pending(msg):
+                    next_deadline = min(deadline, monotonic_ms() + pending_gap_ms)
+                    continue
+                if msg[:1] == b"\x7f":
+                    raise UdsNegativeResponseError(msg)
+                return msg
+
+            if poll_interval_ms > 0:
+                sleep_ms = min(poll_interval_ms, max(0, next_deadline - monotonic_ms()))
+                if sleep_ms > 0:
+                    time.sleep(sleep_ms / 1000.0)
+    finally:
+        stash_pending_uds_many_front(stash)
 
 
 def send_uds_and_wait_final(
@@ -175,7 +168,7 @@ def send_uds_and_wait_final(
         tx_uds_msg=lambda req_payload, is_functional, ts_ms: tp.tx_uds_msg(req_payload, functional=is_functional, ts_ms=ts_ms),
         step_fn=lambda ts_ms: step_once(tp=tp, rxfunc=rxfunc, txfunc=txfunc, ts_ms=ts_ms),
         rx_uds_msg=tp.rx_uds_msg,
-        stash_pending_uds=tp.stash_pending_uds,
+        stash_pending_uds_many_front=tp.stash_pending_uds_many_front,
         functional=functional,
         overall_timeout_ms=overall_timeout_ms,
         pending_gap_ms=pending_gap_ms,
@@ -200,7 +193,7 @@ def send_uds_and_wait_final_lin(
         tx_uds_msg=lambda req_payload, is_functional, ts_ms: tp.tx_uds_msg(req_payload, functional=is_functional, ts_ms=ts_ms),
         step_fn=lambda ts_ms: step_once_lin(tp=tp, rxfunc=rxfunc, txfunc=txfunc, ts_ms=ts_ms),
         rx_uds_msg=tp.rx_uds_msg,
-        stash_pending_uds=tp.stash_pending_uds,
+        stash_pending_uds_many_front=tp.stash_pending_uds_many_front,
         functional=functional,
         overall_timeout_ms=overall_timeout_ms,
         pending_gap_ms=pending_gap_ms,

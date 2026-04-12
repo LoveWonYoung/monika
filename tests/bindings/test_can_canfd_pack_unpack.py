@@ -1,6 +1,6 @@
 import unittest
 
-from isotp_engine.bindings.isotp import IsoTpEngine, IsoTpEngineWorker, TpConfig, build_uds_default_matcher
+from isotp_engine.bindings.isotp import IsoTpEngine, IsoTpEngineWorker, IsoTpError, TpConfig, build_uds_default_matcher
 
 
 REQ_ID = 0x7E0
@@ -205,6 +205,41 @@ class CanCanFdPackUnpackTests(unittest.TestCase):
                 pending_gap_ms=300,
             )
             self.assertEqual(rsp, bytes([0x62, 0xF1, 0x90]))
+
+    def test_worker_preserves_stale_response_order_across_requests(self):
+        with IsoTpEngineWorker(REQ_ID, RESP_ID, FUNC_ID, is_fd=False, cfg=_cfg_fast(), tick_period_ms=1) as tp:
+            tp.on_can_frame(RESP_ID, bytes([0x03, 0x62, 0x12, 0x34, 0, 0, 0, 0]), is_fd=False)
+            tp.on_can_frame(RESP_ID, bytes([0x03, 0x62, 0x56, 0x78, 0, 0, 0, 0]), is_fd=False)
+            tp.on_can_frame(RESP_ID, bytes([0x03, 0x62, 0xF1, 0x90, 0, 0, 0, 0]), is_fd=False)
+
+            rsp_current = tp.tx_uds_msg(
+                bytes([0x22, 0xF1, 0x90]),
+                response_timeout_ms=1000,
+                pending_gap_ms=300,
+            )
+            rsp_stale_first = tp.tx_uds_msg(
+                bytes([0x22, 0x12, 0x34]),
+                response_timeout_ms=1000,
+                pending_gap_ms=300,
+            )
+            rsp_stale_second = tp.tx_uds_msg(
+                bytes([0x22, 0x56, 0x78]),
+                response_timeout_ms=1000,
+                pending_gap_ms=300,
+            )
+            self.assertEqual(rsp_current, bytes([0x62, 0xF1, 0x90]))
+            self.assertEqual(rsp_stale_first, bytes([0x62, 0x12, 0x34]))
+            self.assertEqual(rsp_stale_second, bytes([0x62, 0x56, 0x78]))
+
+    def test_worker_queue_overflow_returns_error(self):
+        tp = IsoTpEngineWorker(REQ_ID, RESP_ID, FUNC_ID, is_fd=False, cfg=_cfg_fast(), tick_period_ms=1, queue_size=1)
+        try:
+            self.assertEqual(tp.tx_uds_msg(bytes([0x3E, 0x80]), response_timeout_ms=None), b"")
+            with self.assertRaises(IsoTpError) as ctx:
+                tp.tx_uds_msg(bytes([0x3E, 0x80]), response_timeout_ms=None)
+            self.assertEqual(ctx.exception.code, -120)
+        finally:
+            tp.close()
 
 
 if __name__ == "__main__":

@@ -152,6 +152,24 @@ class LinPackUnpackTests(unittest.TestCase):
             )
             self.assertEqual(rsp, bytes([0x62, 0xF1, 0x90]))
 
+    def test_lin_worker_queue_overflow_returns_error(self):
+        tp = LinTpEngineWorker(
+            req_frame_id=REQ_FRAME_ID,
+            resp_frame_id=RESP_FRAME_ID,
+            req_nad=REQ_NAD,
+            func_nad=FUNC_NAD,
+            cfg=_cfg_fast(),
+            tick_period_ms=1,
+            queue_size=1,
+        )
+        try:
+            self.assertEqual(tp.tx_uds_msg(bytes([0x3E, 0x80]), response_timeout_ms=None), b"")
+            with self.assertRaises(IsoTpError) as ctx:
+                tp.tx_uds_msg(bytes([0x3E, 0x80]), response_timeout_ms=None)
+            self.assertEqual(ctx.exception.code, -120)
+        finally:
+            tp.close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
