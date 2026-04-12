@@ -132,7 +132,12 @@ class UdsoncanIsoTpConnection(BaseConnection):
                 raise TimeoutException("Did not receive IsoTP frame in time (timeout=%s sec)" % timeout)
 
             if self._poll_interval_s > 0:
-                time.sleep(self._poll_interval_s)
+                if deadline is None:
+                    time.sleep(self._poll_interval_s)
+                else:
+                    sleep_s = min(self._poll_interval_s, max(0.0, deadline - time.monotonic()))
+                    if sleep_s > 0:
+                        time.sleep(sleep_s)
 
     def empty_rxqueue(self) -> None:
         with self._lock:

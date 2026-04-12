@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable
 from typing import Deque, Optional
 
 from . import _ffi
@@ -111,6 +112,12 @@ class IsoTpEngine:
         while self.rx_uds_msg() is not None:
             pass
 
+    def stash_pending_uds(self, payload: bytes) -> None:
+        self._pending_uds.append(payload if isinstance(payload, bytes) else bytes(payload))
+
+    def stash_pending_uds_many(self, payloads: Iterable[bytes]) -> None:
+        self._pending_uds.extend(payload if isinstance(payload, bytes) else bytes(payload) for payload in payloads)
+
 
 class LinTpEngine:
     def __init__(self, req_frame_id: int, resp_frame_id: int, req_nad: int, func_nad: int, cfg: Optional[LinTpConfig] = None):
@@ -199,3 +206,9 @@ class LinTpEngine:
         code, err = _ffi._native.lintp_pop_error(self._handle)
         _ffi.raise_if_error(code)
         return int(err) if code == _ffi.FFI_HAS_ITEM else None
+
+    def stash_pending_uds(self, payload: bytes) -> None:
+        self._pending_uds.append(payload if isinstance(payload, bytes) else bytes(payload))
+
+    def stash_pending_uds_many(self, payloads: Iterable[bytes]) -> None:
+        self._pending_uds.extend(payload if isinstance(payload, bytes) else bytes(payload) for payload in payloads)

@@ -98,12 +98,12 @@ class LinTpWorker:
                 self._worker.on_lin_frame(msg.id, msg.data)
 
             while True:
-                out = self._worker.pop_tx_lin_frame(timeout_s=0.0)
-                if out is None:
+                out_batch = self._worker.pop_tx_lin_frames(max_frames=128, timeout_s=0.0)
+                if not out_batch:
                     break
                 has_work = True
-                frame_id, data = out
-                self._hw.txfn(frame_id, data)
+                for frame_id, data in out_batch:
+                    self._hw.txfn(frame_id, data)
 
             if not has_work and self._bridge_sleep_s > 0:
                 now_s = time.monotonic()

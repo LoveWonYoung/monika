@@ -231,12 +231,12 @@ class CanTpWorker:
                 self._worker.on_can_frame(msg.id, msg.data, msg.isfd)
 
             while True:
-                out = self._worker.pop_tx_can_frame(timeout_s=0.0)
-                if out is None:
+                out_batch = self._worker.pop_tx_can_frames(max_frames=128, timeout_s=0.0)
+                if not out_batch:
                     break
                 has_work = True
-                can_id, data, is_fd = out
-                self._hw.txfn(can_id, data, is_fd)
+                for can_id, data, is_fd in out_batch:
+                    self._hw.txfn(can_id, data, is_fd)
 
             if not has_work and self._bridge_sleep_s > 0:
                 time.sleep(self._bridge_sleep_s)
@@ -336,4 +336,3 @@ class CanTpWorker:
 
     def pop_error(self, timeout_s: float = 0.0) -> Optional[int]:
         return self._worker.pop_error(timeout_s=timeout_s)
-
