@@ -175,6 +175,7 @@ class CanTpWorker:
         tick_period_ms: int = 1,
         bridge_sleep_ms: int = 1,
         worker_queue_size: int = 1024,
+        log_request_ms: bool = False,
     ):
         self._hw = hw
         self._req_id = req_id
@@ -190,6 +191,7 @@ class CanTpWorker:
             queue_size=worker_queue_size,
         )
         self._bridge_sleep_s = max(0.0, bridge_sleep_ms / 1000.0)
+        self._log_request_ms = log_request_ms
         self._stop_evt = threading.Event()
         self._bridge_thread: Optional[threading.Thread] = None
         self._keep_alive_stop_evt = threading.Event()
@@ -254,13 +256,25 @@ class CanTpWorker:
     ) -> bytes:
         if self._bridge_thread is None or not self._bridge_thread.is_alive():
             raise RuntimeError("CanTpWorker is not running; call start() first")
-        return self._worker.tx_uds_msg(
-            payload=payload,
-            functional=functional,
-            response_timeout_ms=timeout_ms,
-            pending_gap_ms=3000,
-            poll_interval_ms=1,
-        )
+        t0 = time.perf_counter()
+        try:
+            return self._worker.tx_uds_msg(
+                payload=payload,
+                functional=functional,
+                response_timeout_ms=timeout_ms,
+                pending_gap_ms=3000,
+                poll_interval_ms=1,
+            )
+        finally:
+            if self._log_request_ms:
+                elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                logger.info(
+                    "uds_request elapsed %.2f ms (functional=%s, timeout_ms=%s, payload_len=%d)",
+                    elapsed_ms,
+                    functional,
+                    timeout_ms,
+                    len(payload),
+                )
 
     def _build_tester_present_sf(self, functional: bool) -> tuple[int, bytes, bool]:
         """Build a raw ISO-TP single-frame TesterPresent (0x3E 0x80) without

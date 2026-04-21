@@ -64,7 +64,7 @@ def _format_can_frame(can_id: int, data: bytes, is_fd: bool) -> str:
     frame_type = "CAN-FD" if is_fd else "CAN"
     data_hex = data.hex(" ") if data else ""
     dlc = _len_to_std_dlc(len(data), is_fd)
-    return f"ID=0x{can_id:03X} Type={frame_type} DLC={dlc:02} Data=[{data_hex}]"
+    return f"ID=0x{can_id:03X} Type={frame_type} DLC={dlc:02} Data=[{data_hex.upper()}]"
 
 
 def _print_can_frame(direction: str, can_id: int, data: bytes, is_fd: bool) -> None:
