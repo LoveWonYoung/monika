@@ -174,6 +174,7 @@ class CanTpWorker:
         cfg: Optional[TpConfig] = None,
         tick_period_ms: int = 1,
         bridge_sleep_ms: int = 1,
+        bridge_busy_sleep_ms: int = 0,
         worker_queue_size: int = 1024,
         log_request_ms: bool = False,
     ):
@@ -191,6 +192,7 @@ class CanTpWorker:
             queue_size=worker_queue_size,
         )
         self._bridge_sleep_s = max(0.0, bridge_sleep_ms / 1000.0)
+        self._bridge_busy_sleep_s = max(0.0, bridge_busy_sleep_ms / 1000.0)
         self._log_request_ms = log_request_ms
         self._stop_evt = threading.Event()
         self._bridge_thread: Optional[threading.Thread] = None
@@ -245,7 +247,9 @@ class CanTpWorker:
                 for can_id, data, is_fd in out_batch:
                     self._hw.txfn(can_id, data, is_fd)
 
-            if not has_work and self._bridge_sleep_s > 0:
+            if has_work and self._bridge_busy_sleep_s > 0:
+                time.sleep(self._bridge_busy_sleep_s)
+            elif not has_work and self._bridge_sleep_s > 0:
                 time.sleep(self._bridge_sleep_s)
 
     def uds_request(

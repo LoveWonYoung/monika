@@ -78,7 +78,14 @@ def _print_can_frame(direction: str, can_id: int, data: bytes, is_fd: bool) -> N
 
 
 class Toomoss(CanDeviceInterface):
-    """Hardware adapter over USB2XXX CAN/CAN-FD API."""
+    """Hardware adapter over USB2XXX CAN/CAN-FD API.
+
+    `min_tx_interval_s` enforces a minimum time between the start of consecutive sends
+    (default 2 ms) for devices that require spacing. Set to 0 to disable.
+
+    `min_rx_poll_interval_s` optionally spaces calls to the USB `GetMsg` path only (not
+    when draining the internal buffer); default 0 does not add RX latency.
+    """
 
     def __init__(
         self,
@@ -86,12 +93,18 @@ class Toomoss(CanDeviceInterface):
         rx_buffer_size: int = 1024,
         poll_batch_size: int = 1024,
         log_frames: bool = True,
+        min_tx_interval_s: float = 0.002,
+        min_rx_poll_interval_s: float = 0.0,
     ):
         self._channel = channel
         self._buf: Deque[RawCanMsg] = deque(maxlen=max(1, rx_buffer_size))
         self._poll_batch_size = max(1, poll_batch_size)
         self._log_frames = log_frames
         self._dropped_frames = 0
+        self._min_tx_interval_s = max(0.0, float(min_tx_interval_s))
+        self._min_rx_poll_interval_s = max(0.0, float(min_rx_poll_interval_s))
+        self._last_tx_monotonic: Optional[float] = None
+        self._last_getmsg_monotonic: Optional[float] = None
 
         self._dev_handles = (c_uint * 20)()
         self._dev_handle: Optional[int] = None
@@ -172,6 +185,11 @@ class Toomoss(CanDeviceInterface):
         if self._dev_handle is None:
             raise DeviceOpenError("Device is not open")
 
+        if self._min_tx_interval_s > 0 and self._last_tx_monotonic is not None:
+            wait = self._min_tx_interval_s - (time.perf_counter() - self._last_tx_monotonic)
+            if wait > 0:
+                time.sleep(wait)
+
         if self._log_frames:
             _print_can_frame("TX", can_id, data, is_fd)
 
@@ -194,6 +212,8 @@ class Toomoss(CanDeviceInterface):
         if sent_num < 0:
             raise DeviceSendError(f"Failed to send CAN frame: {_format_can_frame(can_id, data, is_fd)}")
 
+        self._last_tx_monotonic = time.perf_counter()
+
     def rxfn(self) -> Optional[RawCanMsg]:
         if self._dev_handle is None:
             raise DeviceOpenError("Device is not open")
@@ -201,8 +221,16 @@ class Toomoss(CanDeviceInterface):
         if self._buf:
             return self._buf.popleft()
 
+        if self._min_rx_poll_interval_s > 0:
+            now = time.perf_counter()
+            if self._last_getmsg_monotonic is not None:
+                wait = self._min_rx_poll_interval_s - (now - self._last_getmsg_monotonic)
+                if wait > 0:
+                    time.sleep(wait)
+
         msg_buf = (CANFD_MSG * self._poll_batch_size)()
         frames = CANFD_GetMsg(self._dev_handle, self._channel, byref(msg_buf), self._poll_batch_size)
+        self._last_getmsg_monotonic = time.perf_counter()
         if frames <= 0:
             return None
 
