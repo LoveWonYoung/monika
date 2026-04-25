@@ -2,7 +2,8 @@ import logging
 import time
 from collections import deque
 from ctypes import byref, c_uint
-from typing import Deque, Optional
+from dataclasses import dataclass, fields
+from typing import Deque, Mapping, Optional, Union
 
 from ....common.types import RawCanMsg
 
@@ -14,6 +15,7 @@ from .sdk import (
     CANFD_Init,
     CANFD_INIT_CONFIG,
     CANFD_MSG,
+    CANFD_MSG_FLAG_BRS,
     CANFD_MSG_FLAG_FDF,
     CANFD_MSG_FLAG_IDE,
     CANFD_MSG_FLAG_ID_MASK,
@@ -29,6 +31,165 @@ ToomossCAN2 = 1
 CANFD_DLC_TO_LEN = (0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64)
 CANFD_LEN_TO_DLC = {length: dlc for dlc, length in enumerate(CANFD_DLC_TO_LEN)}
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ToomossCanFdConfig:
+    """CAN FD timing/configuration for Toomoss USB2XXX.
+
+    Timing formula from the SDK:
+        bitrate = 40MHz / BRP / (1 + SEG1 + SEG2)
+    """
+
+    nominal_bitrate: int = 500000
+    data_bitrate: int = 2000000
+    mode: int = 0
+    iso_crc_enable: int = 1
+    retry_send: int = 1
+    res_enable: int = 1
+    nbt_brp: Optional[int] = None
+    nbt_seg1: Optional[int] = None
+    nbt_seg2: Optional[int] = None
+    nbt_sjw: Optional[int] = None
+    dbt_brp: Optional[int] = None
+    dbt_seg1: Optional[int] = None
+    dbt_seg2: Optional[int] = None
+    dbt_sjw: Optional[int] = None
+    tdc: Optional[int] = None
+
+
+class ToomossCanFdPresets:
+    """Common Toomoss CAN FD timing presets."""
+
+    @staticmethod
+    def nominal_500k_data_2m_sp75() -> ToomossCanFdConfig:
+        return ToomossCanFdConfig(
+            nominal_bitrate=500000,
+            data_bitrate=2000000,
+            nbt_brp=1,
+            nbt_seg1=59,
+            nbt_seg2=20,
+            nbt_sjw=2,
+            dbt_brp=1,
+            dbt_seg1=14,
+            dbt_seg2=5,
+            dbt_sjw=2,
+        )
+
+    @staticmethod
+    def nominal_500k_data_2m_sp80() -> ToomossCanFdConfig:
+        return ToomossCanFdConfig(
+            nominal_bitrate=500000,
+            data_bitrate=2000000,
+            nbt_brp=1,
+            nbt_seg1=63,
+            nbt_seg2=16,
+            nbt_sjw=2,
+            dbt_brp=1,
+            dbt_seg1=15,
+            dbt_seg2=4,
+            dbt_sjw=2,
+        )
+
+    @staticmethod
+    def nominal_500k_data_2m_nominal875_data80() -> ToomossCanFdConfig:
+        return ToomossCanFdConfig(
+            nominal_bitrate=500000,
+            data_bitrate=2000000,
+            nbt_brp=1,
+            nbt_seg1=69,
+            nbt_seg2=10,
+            nbt_sjw=2,
+            dbt_brp=1,
+            dbt_seg1=15,
+            dbt_seg2=4,
+            dbt_sjw=2,
+        )
+
+    @staticmethod
+    def nominal_500k_data_4m_sp80() -> ToomossCanFdConfig:
+        return ToomossCanFdConfig(
+            nominal_bitrate=500000,
+            data_bitrate=4000000,
+            nbt_brp=1,
+            nbt_seg1=63,
+            nbt_seg2=16,
+            nbt_sjw=2,
+            dbt_brp=1,
+            dbt_seg1=7,
+            dbt_seg2=2,
+            dbt_sjw=2,
+        )
+
+    @staticmethod
+    def nominal_1m_data_5m_nominal80_data75() -> ToomossCanFdConfig:
+        return ToomossCanFdConfig(
+            nominal_bitrate=1000000,
+            data_bitrate=5000000,
+            nbt_brp=1,
+            nbt_seg1=31,
+            nbt_seg2=8,
+            nbt_sjw=2,
+            dbt_brp=1,
+            dbt_seg1=5,
+            dbt_seg2=2,
+            dbt_sjw=2,
+        )
+
+
+CanFdConfigInput = Union[ToomossCanFdConfig, CANFD_INIT_CONFIG, Mapping[str, int]]
+
+
+_CANFD_FIELD_ALIASES = {
+    "mode": "Mode",
+    "iso_crc_enable": "ISOCRCEnable",
+    "retry_send": "RetrySend",
+    "res_enable": "ResEnable",
+    "nbt_brp": "NBT_BRP",
+    "nbt_seg1": "NBT_SEG1",
+    "nbt_seg2": "NBT_SEG2",
+    "nbt_sjw": "NBT_SJW",
+    "dbt_brp": "DBT_BRP",
+    "dbt_seg1": "DBT_SEG1",
+    "dbt_seg2": "DBT_SEG2",
+    "dbt_sjw": "DBT_SJW",
+    "tdc": "TDC",
+}
+
+
+def _canfd_config_field_names() -> set:
+    return {name for name, _ctype in CANFD_INIT_CONFIG._fields_}
+
+
+def _make_canfd_init_config(
+    dev_handle: int,
+    canfd_config: Optional[CanFdConfigInput],
+) -> CANFD_INIT_CONFIG:
+    config_input = canfd_config or ToomossCanFdConfig()
+    if isinstance(config_input, CANFD_INIT_CONFIG):
+        return config_input
+    if isinstance(config_input, ToomossCanFdConfig):
+        values = {field.name: getattr(config_input, field.name) for field in fields(config_input)}
+    else:
+        values = {field.name: getattr(ToomossCanFdConfig(), field.name) for field in fields(ToomossCanFdConfig)}
+        values.update(dict(config_input))
+
+    nominal_bitrate = int(values.pop("nominal_bitrate", values.pop("bitrate", 500000)))
+    data_bitrate = int(values.pop("data_bitrate", values.pop("fd_bitrate", 2000000)))
+    can_cfg = CANFD_INIT_CONFIG()
+    ret = CANFD_GetCANSpeedArg(dev_handle, byref(can_cfg), nominal_bitrate, data_bitrate)
+    if ret != CANFD_SUCCESS:
+        raise DeviceInitError(f"Failed to get CAN speed arguments, code={ret}")
+
+    valid_fields = _canfd_config_field_names()
+    for raw_name, raw_value in values.items():
+        if raw_value is None:
+            continue
+        name = _CANFD_FIELD_ALIASES.get(raw_name, raw_name)
+        if name not in valid_fields:
+            raise DeviceInitError(f"Unknown Toomoss CAN FD config field: {raw_name}")
+        setattr(can_cfg, name, int(raw_value))
+    return can_cfg
 
 
 def _len_to_device_dlc(payload_len: int, is_fd: bool) -> int:
@@ -95,6 +256,8 @@ class Toomoss(CanDeviceInterface):
         log_frames: bool = True,
         min_tx_interval_s: float = 0.002,
         min_rx_poll_interval_s: float = 0.0,
+        canfd_config: Optional[CanFdConfigInput] = None,
+        brs: bool = False,
     ):
         self._channel = channel
         self._buf: Deque[RawCanMsg] = deque(maxlen=max(1, rx_buffer_size))
@@ -103,6 +266,8 @@ class Toomoss(CanDeviceInterface):
         self._dropped_frames = 0
         self._min_tx_interval_s = max(0.0, float(min_tx_interval_s))
         self._min_rx_poll_interval_s = max(0.0, float(min_rx_poll_interval_s))
+        self._canfd_config = canfd_config
+        self._brs = bool(brs)
         self._last_tx_monotonic: Optional[float] = None
         self._last_getmsg_monotonic: Optional[float] = None
 
@@ -126,23 +291,11 @@ class Toomoss(CanDeviceInterface):
         if not bool(USB_OpenDevice(self._dev_handle)):
             raise DeviceOpenError(f"Failed to open USB2XXX device handle={self._dev_handle}")
 
-        can_cfg = CANFD_INIT_CONFIG()
-        can_cfg.Mode=         0
-        can_cfg.RetrySend=    1
-        can_cfg.ISOCRCEnable= 1
-        can_cfg.ResEnable=    1
-        can_cfg.NBT_BRP=      1
-        can_cfg.NBT_SEG1=     59
-        can_cfg.NBT_SEG2=     20
-        can_cfg.NBT_SJW=      2
-        can_cfg.DBT_BRP=      1
-        can_cfg.DBT_SEG1=     14
-        can_cfg.DBT_SEG2=     5
-        can_cfg.DBT_SJW=      2
-        ret = CANFD_GetCANSpeedArg(self._dev_handle, byref(can_cfg), 500000, 2000000)
-        if ret != CANFD_SUCCESS:
+        try:
+            can_cfg = _make_canfd_init_config(self._dev_handle, self._canfd_config)
+        except DeviceInitError:
             self.close()
-            raise DeviceInitError(f"Failed to get CAN speed arguments, code={ret}")
+            raise
 
         ret = CANFD_Init(self._dev_handle, self._channel, byref(can_cfg))
         if ret != CANFD_SUCCESS:
@@ -198,7 +351,11 @@ class Toomoss(CanDeviceInterface):
         msg_arr = (CANFD_MSG * 1)()
         msg = msg_arr[0]
         msg.DLC = dlc
-        msg.Flags = CANFD_MSG_FLAG_FDF if is_fd else 0
+        msg.Flags = 0
+        if is_fd:
+            msg.Flags = CANFD_MSG_FLAG_FDF
+            if self._brs:
+                msg.Flags |= CANFD_MSG_FLAG_BRS
 
         raw_id = int(can_id) & CANFD_MSG_FLAG_ID_MASK
         if raw_id > 0x7FF:
@@ -262,4 +419,3 @@ class Toomoss(CanDeviceInterface):
         if self._buf:
             return self._buf.popleft()
         return None
-
