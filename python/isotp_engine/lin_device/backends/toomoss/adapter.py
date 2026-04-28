@@ -161,6 +161,8 @@ class ToomossLin:
         out = out_arr[0]
         data_len = max(0, min(8, int(out.DataLen)))
         if data_len == 0:
+            if self._log_frames:
+                _print_lin_frame("RX", frame_id, b"", 0)
             # Some adapters return success even when no slave response bytes are available.
             # Treat zero-length payload as "no frame" to avoid feeding invalid LIN-TP input.
             return None
